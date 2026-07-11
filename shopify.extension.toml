@@ -1,0 +1,80 @@
+# PetezPopz — Shopify Extension Configuration
+# Declares all metafield access via the modern shopify.appMetafields API.
+# This file is the authoritative source for metafield access — NO scope strings
+# in client code, NO unauthenticated_* declarations anywhere.
+#
+# Docs: https://shopify.dev/docs/api/app-metafields
+
+# ── Extension 1: Checkout UI Extension (Loyalty Points Display) ────────────────
+# Renders the collector's points balance and earn preview at checkout.
+
+[[extensions]]
+type            = "ui_extension"
+name            = "PetezPopz Loyalty Checkout Widget"
+handle          = "petezpopz-loyalty-checkout"
+
+  # Customer metafield: current loyalty points balance
+  [[extensions.metafields]]
+  namespace = "custom"
+  key       = "loyalty_points"
+
+  # Customer metafield: lifetime points earned (read-only display)
+  [[extensions.metafields]]
+  namespace = "custom"
+  key       = "loyalty_lifetime_earned"
+
+  # Customer metafield: current loyalty tier label
+  [[extensions.metafields]]
+  namespace = "custom"
+  key       = "loyalty_tier"
+
+# ── Extension 2: POS UI Extension (In-Store Lookup & Loyalty) ─────────────────
+# Surfaces the barcode-scanned product info and customer loyalty status
+# to a store associate via the Shopify POS interface.
+
+[[extensions]]
+type            = "pos_ui_extension"
+name            = "PetezPopz POS Loyalty Panel"
+handle          = "petezpopz-pos-loyalty"
+
+  # Customer loyalty balance — displayed to associate during transaction
+  [[extensions.metafields]]
+  namespace = "custom"
+  key       = "loyalty_points"
+
+  # Customer tier badge shown on POS customer profile
+  [[extensions.metafields]]
+  namespace = "custom"
+  key       = "loyalty_tier"
+
+  # Product metafield: franchise tag used for cross-merch suggestions on POS
+  [[extensions.metafields]]
+  namespace = "custom"
+  key       = "franchise"
+
+  # Product metafield: VIP release flag — suppresses add-to-cart on POS if set
+  [[extensions.metafields]]
+  namespace = "custom"
+  key       = "vip_only"
+
+  # Product metafield: scheduled launch timestamp for VIP drop countdown
+  [[extensions.metafields]]
+  namespace = "custom"
+  key       = "launch_time"
+
+# ── Extension 3: Order Status Page Extension (Post-purchase Points Preview) ────
+# Shows the customer how many points they just earned after order is placed.
+
+[[extensions]]
+type            = "ui_extension"
+name            = "PetezPopz Post-Purchase Points"
+handle          = "petezpopz-order-points"
+extension_points = ["purchase.thank-you.block.render"]
+
+  [[extensions.metafields]]
+  namespace = "custom"
+  key       = "loyalty_points"
+
+  [[extensions.metafields]]
+  namespace = "custom"
+  key       = "loyalty_tier"

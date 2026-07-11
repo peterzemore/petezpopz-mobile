@@ -1,0 +1,189 @@
+// PetezPopz — GraphQL Queries: Cart (Storefront API)
+import { storefrontFetch, Cart } from '../shopify-storefront';
+
+// ── Fragments ─────────────────────────────────────────────────────────────────
+
+export const CART_FRAGMENT = `
+  fragment CartFields on Cart {
+    id
+    checkoutUrl
+    totalQuantity
+    note
+    attributes { key value }
+    discountCodes { code applicable }
+    cost {
+      subtotalAmount { amount currencyCode }
+      totalAmount { amount currencyCode }
+      totalTaxAmount { amount currencyCode }
+    }
+    lines(first: 100) {
+      nodes {
+        id
+        quantity
+        cost { totalAmount { amount currencyCode } }
+        merchandise {
+          ... on ProductVariant {
+            id
+            title
+            price { amount currencyCode }
+            image { url altText width height }
+            product {
+              id
+              handle
+              title
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+// ── Create cart ───────────────────────────────────────────────────────────────
+
+export const CART_CREATE = `
+  ${CART_FRAGMENT}
+  mutation CartCreate($input: CartInput!) {
+    cartCreate(input: $input) {
+      cart { ...CartFields }
+      userErrors { field message }
+    }
+  }
+`;
+
+export async function createCart(lines: Array<{ merchandiseId: string; quantity: number }> = []) {
+  return storefrontFetch<{
+    cartCreate: { cart: Cart; userErrors: Array<{ field: string; message: string }> };
+  }>(CART_CREATE, { input: { lines } });
+}
+
+// ── Add lines to cart ─────────────────────────────────────────────────────────
+
+export const CART_LINES_ADD = `
+  ${CART_FRAGMENT}
+  mutation CartLinesAdd($cartId: ID!, $lines: [CartLineInput!]!) {
+    cartLinesAdd(cartId: $cartId, lines: $lines) {
+      cart { ...CartFields }
+      userErrors { field message }
+    }
+  }
+`;
+
+export async function addCartLines(
+  cartId: string,
+  lines: Array<{ merchandiseId: string; quantity: number }>,
+) {
+  return storefrontFetch<{
+    cartLinesAdd: { cart: Cart; userErrors: Array<{ field: string; message: string }> };
+  }>(CART_LINES_ADD, { cartId, lines });
+}
+
+// ── Update line quantities ────────────────────────────────────────────────────
+
+export const CART_LINES_UPDATE = `
+  ${CART_FRAGMENT}
+  mutation CartLinesUpdate($cartId: ID!, $lines: [CartLineUpdateInput!]!) {
+    cartLinesUpdate(cartId: $cartId, lines: $lines) {
+      cart { ...CartFields }
+      userErrors { field message }
+    }
+  }
+`;
+
+export async function updateCartLines(
+  cartId: string,
+  lines: Array<{ id: string; quantity: number }>,
+) {
+  return storefrontFetch<{
+    cartLinesUpdate: { cart: Cart; userErrors: Array<{ field: string; message: string }> };
+  }>(CART_LINES_UPDATE, { cartId, lines });
+}
+
+// ── Remove lines ──────────────────────────────────────────────────────────────
+
+export const CART_LINES_REMOVE = `
+  ${CART_FRAGMENT}
+  mutation CartLinesRemove($cartId: ID!, $lineIds: [ID!]!) {
+    cartLinesRemove(cartId: $cartId, lineIds: $lineIds) {
+      cart { ...CartFields }
+      userErrors { field message }
+    }
+  }
+`;
+
+export async function removeCartLines(cartId: string, lineIds: string[]) {
+  return storefrontFetch<{
+    cartLinesRemove: { cart: Cart; userErrors: Array<{ field: string; message: string }> };
+  }>(CART_LINES_REMOVE, { cartId, lineIds });
+}
+
+// ── Apply discount code ───────────────────────────────────────────────────────
+
+export const CART_DISCOUNT_CODES_UPDATE = `
+  ${CART_FRAGMENT}
+  mutation CartDiscountCodesUpdate($cartId: ID!, $discountCodes: [String!]!) {
+    cartDiscountCodesUpdate(cartId: $cartId, discountCodes: $discountCodes) {
+      cart { ...CartFields }
+      userErrors { field message }
+    }
+  }
+`;
+
+export async function applyDiscountCode(cartId: string, code: string) {
+  return storefrontFetch<{
+    cartDiscountCodesUpdate: { cart: Cart; userErrors: Array<{ field: string; message: string }> };
+  }>(CART_DISCOUNT_CODES_UPDATE, { cartId, discountCodes: [code] });
+}
+
+// ── Update cart note + attributes (BOPIS) ─────────────────────────────────────
+
+export const CART_NOTE_UPDATE = `
+  ${CART_FRAGMENT}
+  mutation CartNoteUpdate($cartId: ID!, $note: String!) {
+    cartNoteUpdate(cartId: $cartId, note: $note) {
+      cart { ...CartFields }
+      userErrors { field message }
+    }
+  }
+`;
+
+export const CART_ATTRIBUTES_UPDATE = `
+  ${CART_FRAGMENT}
+  mutation CartAttributesUpdate($cartId: ID!, $attributes: [AttributeInput!]!) {
+    cartAttributesUpdate(cartId: $cartId, attributes: $attributes) {
+      cart { ...CartFields }
+      userErrors { field message }
+    }
+  }
+`;
+
+/**
+ * Sets the BOPIS pickup flag as a cart attribute.
+ * Shopify Order notes will show this to the merchant.
+ */
+export async function setBOPISPickup(cartId: string, isPickup: boolean, locationName?: string) {
+  return storefrontFetch<{
+    cartAttributesUpdate: { cart: Cart; userErrors: Array<{ field: string; message: string }> };
+  }>(CART_ATTRIBUTES_UPDATE, {
+    cartId,
+    attributes: [
+      { key: 'fulfillment_method', value: isPickup ? 'in_store_pickup' : 'shipping' },
+      { key: 'pickup_location', value: locationName ?? 'PetezPopz Store' },
+    ],
+  });
+}
+
+// ── Fetch cart by ID ──────────────────────────────────────────────────────────
+
+export const GET_CART = `
+  ${CART_FRAGMENT}
+  query GetCart($cartId: ID!) {
+    cart(id: $cartId) {
+      ...CartFields
+    }
+  }
+`;
+
+export async function fetchCart(cartId: string) {
+  return storefrontFetch<{ cart: Cart | null }>(GET_CART, { cartId });
+}
