@@ -34,8 +34,8 @@ type ScanState = 'idle' | 'scanning' | 'found' | 'not_found';
 
 export default function ScannerScreen() {
   const router = useRouter();
-  const { hasPermission, requestPermission } = useCameraPermission();
-  const device = useCameraDevice('back');
+#const { hasPermission, requestPermission } = useCameraPermission();  
+#const device = useCameraDevice('back');
 
   const [scanState, setScanState] = useState<ScanState>('idle');
   const [lastScan, setLastScan] = useState<string | null>(null);
