@@ -21,6 +21,7 @@ import {
 } from '../../api/queries/products';
 import { Product } from '../../api/shopify-storefront';
 import { useCartStore } from '../../store/cartStore';
+import { filterVisibleProducts } from '../../utils/productFilters';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -93,7 +94,7 @@ export function CrossMerchShelf({ currentProduct }: Props) {
     }
 
     fetchCrossMerchProducts(tag, currentProduct.id)
-      .then((res) => setProducts(res.data.products.nodes))
+      .then((res) => setProducts(filterVisibleProducts(res.data.products.nodes)))
       .catch(console.warn)
       .finally(() => setLoading(false));
   }, [currentProduct.id]);

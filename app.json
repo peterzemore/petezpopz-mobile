@@ -12,18 +12,23 @@
       "resizeMode": "contain",
       "backgroundColor": "#0A0A12"
     },
-    "scheme": "petezpopz",
+    "scheme": [
+      "petezpopz",
+      "shop.55261102144.app"
+    ],
     "assetBundlePatterns": [
       "**/*"
     ],
     "ios": {
-      "supportsTablet": false,
       "bundleIdentifier": "com.petezpopz.app",
+      "supportsTablet": true,
       "buildNumber": "1",
       "infoPlist": {
         "NSCameraUsageDescription": "PetezPopz needs camera access to scan product barcodes.",
         "NSFaceIDUsageDescription": "PetezPopz uses Face ID to securely sign you into your collector account.",
-        "NSPhotoLibraryUsageDescription": "PetezPopz may access photos to update your profile."
+        "NSPhotoLibraryUsageDescription": "PetezPopz may access photos to update your profile.",
+        "NSPhotoLibraryAddUsageDescription": "PetezPopz may add photos to your library.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -45,6 +50,14 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "16.0"
+          }
+        }
+      ],
       [
         "expo-font",
         {
@@ -68,13 +81,6 @@
         }
       ],
       "expo-secure-store",
-      [
-        "react-native-vision-camera",
-        {
-          "cameraPermissionText": "PetezPopz needs camera access to scan product barcodes.",
-          "enableMicrophonePermission": false
-        }
-      ],
       "expo-asset"
     ],
     "experiments": {

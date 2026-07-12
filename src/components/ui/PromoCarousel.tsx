@@ -18,6 +18,7 @@ import { FontFamily, FontSize } from '../../theme/typography';
 import { Spacing, BorderRadius } from '../../theme/spacing';
 import { fetchPromoBanners } from '../../api/queries/collections';
 import { Product } from '../../api/shopify-storefront';
+import { filterVisibleProducts } from '../../utils/productFilters';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const BANNER_WIDTH = SCREEN_W - Spacing[8];
@@ -34,7 +35,8 @@ export function PromoCarousel() {
   useEffect(() => {
     fetchPromoBanners()
       .then((res) => {
-        setProducts((res.data.collection?.products.nodes ?? []) as Product[]);
+        const nodes = (res.data.collection?.products.nodes ?? []) as Product[];
+        setProducts(filterVisibleProducts(nodes));
       })
       .catch(console.warn)
       .finally(() => setLoading(false));

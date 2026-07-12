@@ -1,28 +1,29 @@
 // PetezPopz — Barcode Scanner Screen
-// Uses react-native-vision-camera + vision-camera-code-scanner
+// Uses react-native-vision-camera v5 (built-in object/code scanning)
 // Scans UPC/EAN barcodes and searches Shopify by SKU.
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   Pressable,
   ActivityIndicator,
-  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
   Camera,
   useCameraDevice,
   useCameraPermission,
-  useCodeScanner,
+  useObjectOutput,
+  type ScannedObject,
+  type ScannedCode,
+  type ScannedObjectType,
 } from 'react-native-vision-camera';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withRepeat,
   withTiming,
-  withSequence,
   Easing,
 } from 'react-native-reanimated';
 import { Colors } from '../src/theme/colors';
@@ -32,14 +33,28 @@ import { searchProductBySKU } from '../src/api/queries/products';
 
 type ScanState = 'idle' | 'scanning' | 'found' | 'not_found';
 
+// Barcode types supported by VisionCamera v5
+const BARCODE_TYPES: ScannedObjectType[] = [
+  'ean-13',
+  'ean-8',
+  'upc-e',
+  'code-128',
+  'code-39',
+  'qr',
+];
+
 export default function ScannerScreen() {
   const router = useRouter();
-#const { hasPermission, requestPermission } = useCameraPermission();  
-#const device = useCameraDevice('back');
+  const { hasPermission, requestPermission } = useCameraPermission();
+  const device = useCameraDevice('back');
 
   const [scanState, setScanState] = useState<ScanState>('idle');
   const [lastScan, setLastScan] = useState<string | null>(null);
   const [isActive, setIsActive] = useState(true);
+
+  // Use a ref to track scan state inside the callback without stale closures
+  const scanStateRef = useRef<ScanState>('idle');
+  const lastScanRef = useRef<string | null>(null);
 
   // Laser sweep animation
   const laserY = useSharedValue(0);
@@ -61,46 +76,64 @@ export default function ScannerScreen() {
     }
   }, [hasPermission]);
 
-  const handleCodeScanned = useCallback(
-    async (codes: { value?: string; type?: string }[]) => {
-      const code = codes[0]?.value;
-      if (!code || code === lastScan || scanState === 'scanning') return;
+  const handleObjectsScanned = useCallback(
+    async (objects: ScannedObject[]) => {
+      // Filter to only ScannedCode objects (barcodes) which have a `value`
+      const codes = objects.filter(
+        (o): o is ScannedCode => 'value' in o && typeof (o as ScannedCode).value === 'string',
+      );
 
+      const code = codes[0]?.value;
+      if (
+        !code ||
+        code === lastScanRef.current ||
+        scanStateRef.current === 'scanning'
+      ) {
+        return;
+      }
+
+      lastScanRef.current = code;
+      scanStateRef.current = 'scanning';
       setLastScan(code);
       setScanState('scanning');
-      setIsActive(false); // Pause camera while searching
+      setIsActive(false);
 
       try {
         const result = await searchProductBySKU(code);
         const products = result.data.products.nodes;
 
         if (products.length > 0) {
+          scanStateRef.current = 'found';
           setScanState('found');
-          // Navigate after brief success flash
           setTimeout(() => {
             router.replace(`/product/${products[0].handle}`);
           }, 600);
         } else {
+          scanStateRef.current = 'not_found';
           setScanState('not_found');
-          // Reset after showing "not found" message
           setTimeout(() => {
+            scanStateRef.current = 'idle';
+            lastScanRef.current = null;
             setScanState('idle');
             setLastScan(null);
             setIsActive(true);
           }, 3000);
         }
       } catch {
+        scanStateRef.current = 'idle';
+        lastScanRef.current = null;
         setScanState('idle');
         setLastScan(null);
         setIsActive(true);
       }
     },
-    [lastScan, scanState, router],
+    [router],
   );
 
-  const codeScanner = useCodeScanner({
-    codeTypes: ['ean-13', 'ean-8', 'upc-a', 'upc-e', 'code-128', 'code-39', 'qr'],
-    onCodeScanned: handleCodeScanned,
+  // VisionCamera v5: useObjectOutput replaces useBarcodeScanner
+  const objectOutput = useObjectOutput({
+    types: BARCODE_TYPES,
+    onObjectsScanned: handleObjectsScanned,
   });
 
   if (!hasPermission) {
@@ -128,12 +161,12 @@ export default function ScannerScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Camera view */}
+      {/* Camera view — V5 API: pass outputs array */}
       <Camera
         style={StyleSheet.absoluteFill}
         device={device}
         isActive={isActive}
-        codeScanner={codeScanner}
+        outputs={[objectOutput]}
       />
 
       {/* Dark overlay with cutout effect */}
@@ -148,7 +181,7 @@ export default function ScannerScreen() {
           {/* Viewfinder box */}
           <View style={styles.viewfinder}>
             {/* Corner brackets */}
-            {['tl', 'tr', 'bl', 'br'].map((corner) => (
+            {(['tl', 'tr', 'bl', 'br'] as const).map((corner) => (
               <View
                 key={corner}
                 style={[
@@ -202,10 +235,12 @@ export default function ScannerScreen() {
           </View>
 
           {/* Reset button */}
-          {(scanState === 'not_found') && (
+          {scanState === 'not_found' && (
             <Pressable
               style={styles.rescanBtn}
               onPress={() => {
+                scanStateRef.current = 'idle';
+                lastScanRef.current = null;
                 setScanState('idle');
                 setLastScan(null);
                 setIsActive(true);

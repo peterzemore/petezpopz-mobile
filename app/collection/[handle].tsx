@@ -16,6 +16,7 @@ import { Spacing, BorderRadius } from '../../src/theme/spacing';
 import { ProductCard } from '../../src/components/ui/ProductCard';
 import { fetchCollection } from '../../src/api/queries/collections';
 import { Product } from '../../src/api/shopify-storefront';
+import { filterVisibleProducts } from '../../src/utils/productFilters';
 
 type SortKey = 'COLLECTION_DEFAULT' | 'PRICE' | 'BEST_SELLING' | 'CREATED_AT';
 
@@ -51,10 +52,11 @@ export default function CollectionScreen() {
         setHasNextPage(col.products.pageInfo.hasNextPage);
         setCursor(col.products.pageInfo.endCursor);
 
+        const visible = filterVisibleProducts(col.products.nodes);
         if (after) {
-          setProducts((prev) => [...prev, ...col.products.nodes]);
+          setProducts((prev) => [...prev, ...visible]);
         } else {
-          setProducts(col.products.nodes);
+          setProducts(visible);
         }
       } catch (err) {
         console.warn('Collection fetch error:', err);

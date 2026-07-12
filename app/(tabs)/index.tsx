@@ -139,7 +139,7 @@ export default function HomeScreen() {
             {/* Funko Pops */}
             <Pressable
               style={styles.forkCard}
-              onPress={() => router.push('/collection/funko-pops-all')}
+              onPress={() => router.push('/collection/funko-pops')}
             >
               <LinearGradient
                 colors={['#1A0066', '#0A0A12']}
@@ -155,7 +155,7 @@ export default function HomeScreen() {
             {/* Loungefly */}
             <Pressable
               style={styles.forkCard}
-              onPress={() => router.push('/collection/loungefly-all')}
+              onPress={() => router.push('/collection/loungefly')}
             >
               <LinearGradient
                 colors={['#3D0044', '#0A0A12']}

@@ -1,5 +1,6 @@
 // PetezPopz — GraphQL Queries: Products
 import { storefrontFetch, type Product } from '../shopify-storefront';
+import { filterVisibleProducts } from '../../utils/productFilters';
 
 // ── Fragments ──────────────────────────────────────────────────────────────────
 
@@ -92,9 +93,11 @@ export const SEARCH_BY_SKU = `
 `;
 
 export async function searchProductBySKU(sku: string) {
-  return storefrontFetch<{ products: { nodes: Product[] } }>(SEARCH_BY_SKU, {
+  const res = await storefrontFetch<{ products: { nodes: Product[] } }>(SEARCH_BY_SKU, {
     query: `sku:${sku}`,
   });
+  res.data.products.nodes = filterVisibleProducts(res.data.products.nodes);
+  return res;
 }
 
 // ── Predictive search (text search bar) ───────────────────────────────────────
@@ -111,10 +114,12 @@ export const PREDICTIVE_SEARCH = `
 `;
 
 export async function searchProducts(query: string, first = 20) {
-  return storefrontFetch<{ products: { nodes: Product[] } }>(PREDICTIVE_SEARCH, {
+  const res = await storefrontFetch<{ products: { nodes: Product[] } }>(PREDICTIVE_SEARCH, {
     query,
     first,
   });
+  res.data.products.nodes = filterVisibleProducts(res.data.products.nodes);
+  return res;
 }
 
 // ── Cross-merchandising: fetch by franchise tag ────────────────────────────────

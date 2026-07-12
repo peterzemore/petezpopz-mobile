@@ -1,47 +1,56 @@
 // PetezPopz — Unified Shopify GraphQL Client (API 2026-04)
 //
-// Architecture — Modern Headless (2026-04):
+// Architecture:
 // ─────────────────────────────────────────────────────────────────────────────
-// ONE endpoint handles both public catalog access AND authenticated customer
-// requests. Token-based storefront access has been deprecated; identification
-// is now header-driven using the public Client ID and store domain.
+// Public catalog calls (products, collections, cart) use the classic per-store
+// Storefront API endpoint with no access token — the store has public storefront
+// access enabled.
 //
-//  Public catalog (products, collections, cart mutations):
-//    POST https://shopify.com/api/2026-04/graphql
-//    Headers:
-//      Shopify-Store-Domain: gemcitytoyco.myshopify.com
-//      Shopify-Client-Id:    <EXPO_PUBLIC_SHOPIFY_CUSTOMER_CLIENT_ID>
+//  Public catalog:
+//    POST https://{store}.myshopify.com/api/2026-04/graphql.json
+//    Headers: Content-Type, Accept  (no token required)
 //
-//  Authenticated customer (profile, orders, metafields, loyalty):
-//    POST https://shopify.com/api/2026-04/graphql
-//    Headers:  (same as above, plus)
-//      Authorization: Bearer <pkce_access_token>
-//
-// There is NO static storefront token. NO unauthenticated_* scopes.
-// Access is governed entirely by shopify.app.toml + shopify.extension.toml.
+//  Authenticated customer (profile, orders, loyalty metafields):
+//    POST https://shopify.com/api/2026-04/graphql   (Customer Account API)
+//    Headers: (above) + Authorization: Bearer <pkce_access_token>
+//             + Shopify-Store-Domain, Shopify-Client-Id
 // ─────────────────────────────────────────────────────────────────────────────
 
 const STORE_DOMAIN =
   process.env.EXPO_PUBLIC_SHOPIFY_STORE_DOMAIN ?? 'gemcitytoyco.myshopify.com';
 const CLIENT_ID =
   process.env.EXPO_PUBLIC_SHOPIFY_CUSTOMER_CLIENT_ID ?? '';
-const GRAPHQL_ENDPOINT =
+const STOREFRONT_TOKEN =
+  process.env.EXPO_PUBLIC_SHOPIFY_STOREFRONT_ACCESS_TOKEN ?? '';
+
+// Public storefront (products, collections, cart)
+const STOREFRONT_ENDPOINT = `https://${STORE_DOMAIN}/api/2026-04/graphql.json`;
+
+// Customer Account API (authenticated profile/orders)
+const CUSTOMER_API_ENDPOINT =
   process.env.EXPO_PUBLIC_SHOPIFY_CUSTOMER_GRAPHQL_URL ??
   'https://shopify.com/api/2026-04/graphql';
 
-// ── Base headers (public, no auth) ────────────────────────────────────────────
+// ── Base headers ──────────────────────────────────────────────────────────────
 
-function baseHeaders(accessToken?: string): Record<string, string> {
-  const headers: Record<string, string> = {
+/** Headers for public storefront requests (uses public Storefront API access token). */
+function storefrontHeaders(): Record<string, string> {
+  return {
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+    'X-Shopify-Storefront-Access-Token': STOREFRONT_TOKEN,
+  };
+}
+
+/** Headers for authenticated Customer Account API requests. */
+function customerHeaders(accessToken: string): Record<string, string> {
+  return {
     'Content-Type': 'application/json',
     Accept: 'application/json',
     'Shopify-Store-Domain': STORE_DOMAIN,
     'Shopify-Client-Id': CLIENT_ID,
+    Authorization: `Bearer ${accessToken}`,
   };
-  if (accessToken) {
-    headers['Authorization'] = `Bearer ${accessToken}`;
-  }
-  return headers;
 }
 
 // ── Error types ───────────────────────────────────────────────────────────────
@@ -60,7 +69,7 @@ export class ShopifyGraphQLError extends Error {
   ) {
     super(
       `[Shopify GraphQL${operationName ? ` / ${operationName}` : ''}] ` +
-        errors.map((e) => e.message).join(' | '),
+      errors.map((e) => e.message).join(' | '),
     );
     this.name = 'ShopifyGraphQLError';
   }
@@ -75,15 +84,16 @@ export class ShopifyHTTPError extends Error {
 
 // ── Core fetch wrapper ────────────────────────────────────────────────────────
 
-async function shopifyFetch<T = unknown>(
+async function graphqlFetch<T = unknown>(
+  endpoint: string,
+  headers: Record<string, string>,
   query: string,
   variables?: Record<string, unknown>,
-  accessToken?: string,
   operationName?: string,
 ): Promise<{ data: T }> {
-  const response = await fetch(GRAPHQL_ENDPOINT, {
+  const response = await fetch(endpoint, {
     method: 'POST',
-    headers: baseHeaders(accessToken),
+    headers,
     body: JSON.stringify({ query, variables, operationName }),
   });
 
@@ -101,19 +111,19 @@ async function shopifyFetch<T = unknown>(
   return { data: json.data as T };
 }
 
-// ── Public client — no auth token required ────────────────────────────────────
-// Use for: products, collections, cart mutations (pre-checkout)
+// ── Public storefront client — products, collections, cart ────────────────────
+// Uses the classic per-store endpoint; no access token required.
 
 export async function storefrontFetch<T = unknown>(
   query: string,
   variables?: Record<string, unknown>,
   operationName?: string,
 ): Promise<{ data: T }> {
-  return shopifyFetch<T>(query, variables, undefined, operationName);
+  return graphqlFetch<T>(STOREFRONT_ENDPOINT, storefrontHeaders(), query, variables, operationName);
 }
 
-// ── Authenticated client — requires PKCE access token ─────────────────────────
-// Use for: customer profile, orders, loyalty metafields, cart buyer identity
+// ── Authenticated Customer Account API client ─────────────────────────────────
+// Use for: customer profile, orders, loyalty metafields
 
 export async function customerFetch<T = unknown>(
   query: string,
@@ -121,7 +131,7 @@ export async function customerFetch<T = unknown>(
   variables?: Record<string, unknown>,
   operationName?: string,
 ): Promise<{ data: T }> {
-  return shopifyFetch<T>(query, variables, accessToken, operationName);
+  return graphqlFetch<T>(CUSTOMER_API_ENDPOINT, customerHeaders(accessToken), query, variables, operationName);
 }
 
 // ── Shared domain types ────────────────────────────────────────────────────────

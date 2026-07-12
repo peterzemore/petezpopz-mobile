@@ -1,6 +1,7 @@
 // PetezPopz — GraphQL Queries: Collections
 import { storefrontFetch, Collection, Product } from '../shopify-storefront';
 import { PRODUCT_CARD_FRAGMENT } from './products';
+import { filterVisibleProducts } from '../../utils/productFilters';
 
 // ── Collection fragment ────────────────────────────────────────────────────────
 
@@ -23,7 +24,7 @@ export const COLLECTION_FRAGMENT = `
 
 export const GET_PROMO_BANNERS = `
   query GetPromoBanners {
-    collection(handle: "app-exclusive-promo") {
+    collection(handle: "new-arrivals") {
       id
       title
       products(first: 10, sortKey: MANUAL) {
@@ -58,7 +59,9 @@ export const GET_VIP_RELEASES = `
 `;
 
 export async function fetchVIPReleases() {
-  return storefrontFetch<{ products: { nodes: Product[] } }>(GET_VIP_RELEASES);
+  const res = await storefrontFetch<{ products: { nodes: Product[] } }>(GET_VIP_RELEASES);
+  res.data.products.nodes = filterVisibleProducts(res.data.products.nodes);
+  return res;
 }
 
 // ── Collection by handle (paginated) ──────────────────────────────────────────
@@ -123,19 +126,21 @@ export async function fetchAllCollections(first = 50) {
 // ── Category handle mappings ───────────────────────────────────────────────────
 
 export const FUNKO_CATEGORIES = [
-  { label: 'Anime', handle: 'funko-anime', emoji: '⛩️' },
-  { label: 'Disney / Marvel / Star Wars', handle: 'funko-disney-marvel-starwars', emoji: '🏰' },
-  { label: 'Television & Movies', handle: 'funko-tv-movies', emoji: '🎬' },
-  { label: 'Animation', handle: 'funko-animation', emoji: '🎨' },
-  { label: 'Music & Sports', handle: 'funko-music-sports', emoji: '🎸' },
-  { label: 'Exclusives & Grails', handle: 'funko-exclusives-grails', emoji: '💎' },
+  { label: 'Anime', handle: 'anime', emoji: '⛩️' },
+  { label: 'Disney', handle: 'disney', emoji: '🏰' },
+  { label: 'Marvel', handle: 'marvel', emoji: '🦸' },
+  { label: 'Star Wars', handle: 'star-wars', emoji: '⚔️' },
+  { label: 'Movies', handle: 'movies', emoji: '🎬' },
+  { label: 'Horror', handle: 'horror', emoji: '💀' },
+  { label: 'Sports', handle: 'sports', emoji: '🎸' },
+  { label: 'Chase Variants', handle: 'chase', emoji: '💎' },
 ] as const;
 
 export const LOUNGEFLY_CATEGORIES = [
-  { label: 'Disney & Pixar', handle: 'loungefly-disney-pixar', emoji: '✨' },
-  { label: 'Anime & Gaming', handle: 'loungefly-anime-gaming', emoji: '🎮' },
-  { label: 'Pop Culture Icons', handle: 'loungefly-pop-culture', emoji: '⭐' },
-  { label: 'Seasonal / Holiday', handle: 'loungefly-seasonal', emoji: '🎄' },
-  { label: 'Mini Backpacks', handle: 'loungefly-mini-backpacks', emoji: '🎒' },
-  { label: 'Crossbody & Wallets', handle: 'loungefly-crossbody-wallets', emoji: '👜' },
+  { label: 'Loungefly & Bioworld', handle: 'loungefly', emoji: '👜' },
+  { label: 'Backpacks', handle: 'backpacks', emoji: '🎒' },
+  { label: 'Disney', handle: 'disney', emoji: '✨' },
+  { label: 'Anime', handle: 'anime', emoji: '🎮' },
+  { label: 'Marvel', handle: 'marvel', emoji: '⭐' },
+  { label: 'Best Sellers', handle: 'best-sellers-1', emoji: '🔥' },
 ] as const;

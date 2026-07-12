@@ -50,6 +50,8 @@ export default function TabLayout() {
         tabBarShowLabel: false,
         tabBarActiveTintColor: Colors.brand.violet,
         tabBarInactiveTintColor: Colors.text.muted,
+        // Give the icon slot enough height to show emoji + label without clipping
+        tabBarIconStyle: { height: 54, width: 72 },
       }}
     >
       <Tabs.Screen
@@ -93,19 +95,21 @@ const styles = StyleSheet.create({
     position: 'absolute',
     borderTopWidth: 1,
     borderTopColor: Colors.border.default,
-    height: Platform.OS === 'ios' ? 88 : 68,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 8,
-    paddingTop: 8,
+    height: Platform.OS === 'ios' ? 88 : 76,
+    paddingBottom: Platform.OS === 'ios' ? 24 : 10,
+    paddingTop: 6,
     backgroundColor: 'transparent',
     elevation: 0,
   },
   tabItem: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 3,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
+    gap: 2,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 12,
+    // Prevent the container from clipping children
+    overflow: 'visible',
   },
   tabItemActive: {
     backgroundColor: 'rgba(123,47,255,0.12)',
