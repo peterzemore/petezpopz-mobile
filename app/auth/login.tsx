@@ -6,23 +6,41 @@ import {
   StyleSheet,
   Pressable,
   ActivityIndicator,
+  Platform,
+  ScrollView,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as WebBrowser from 'expo-web-browser';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as LocalAuthentication from 'expo-local-authentication';
 import { Colors } from '../../src/theme/colors';
 import { FontFamily, FontSize } from '../../src/theme/typography';
 import { Spacing, BorderRadius, Shadow } from '../../src/theme/spacing';
-import { useShopifyAuth, exchangeCodeForTokens } from '../../src/api/shopify-customer';
+import { useShopifyAuth, exchangeCodeForTokens, savePendingVerifier } from '../../src/api/shopify-customer';
 import { useAuthStore } from '../../src/store/authStore';
+
+// Shopify serves these on the store's primary domain; both required to be
+// reachable in-app for App Store / Play Store review.
+const TERMS_URL = 'https://petezpopz.com/policies/terms-of-service';
+const PRIVACY_URL = 'https://petezpopz.com/policies/privacy-policy';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { request, response, promptAsync } = useShopifyAuth();
-  const { setTokens, isAuthenticated, isLoading } = useAuthStore();
+  // useAuthRequest returns a tuple [request, response, promptAsync] — not an object.
+  const [request, response, promptAsync] = useShopifyAuth();
+  const { setTokens, isLoading } = useAuthStore();
 
-  // Handle OAuth callback
+  // Persist the PKCE verifier as soon as it exists — in standalone Android
+  // builds, the redirect can land on app/callback.tsx instead of being caught
+  // here, and that screen needs this to complete the exchange itself.
+  useEffect(() => {
+    if (request?.codeVerifier) {
+      savePendingVerifier(request.codeVerifier);
+    }
+  }, [request?.codeVerifier]);
+
+  // OAuth Callback
   useEffect(() => {
     if (response?.type === 'success') {
       const { code } = response.params;
@@ -32,43 +50,30 @@ export default function LoginScreen() {
           .then(({ accessToken, refreshToken, expiresIn }) =>
             setTokens(accessToken, refreshToken, expiresIn),
           )
-          .then(() => router.back())
-          .catch((err) => console.error('Token exchange failed:', err));
+          .then(() => {
+            // After a logout, this screen is reached via router.replace(), which
+            // leaves no history entry to go back to — calling back() in that case
+            // throws "GO_BACK was not handled by any navigator".
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/(tabs)');
+            }
+          })
+          .catch((err) => {
+            console.error('Token exchange failed:', err);
+            alert('Sign in failed. Please try again.');
+          });
       }
     }
   }, [response]);
 
-  // Biometric auth for returning users
-  useEffect(() => {
-    if (isAuthenticated) {
-      router.back();
-      return;
-    }
-    tryBiometricLogin();
-  }, [isAuthenticated]);
-
-  const tryBiometricLogin = async () => {
-    const compatible = await LocalAuthentication.hasHardwareAsync();
-    const enrolled = await LocalAuthentication.isEnrolledAsync();
-    if (!compatible || !enrolled) return;
-
-    const result = await LocalAuthentication.authenticateAsync({
-      promptMessage: 'Sign in to PetezPopz',
-      fallbackLabel: 'Use Passcode',
-    });
-
-    if (result.success) {
-      // Biometric passed — re-load existing session
-      await useAuthStore.getState().loadSession();
-      if (useAuthStore.getState().isAuthenticated) {
-        router.back();
-      }
-    }
-  };
-
   return (
     <SafeAreaView style={styles.safe}>
-      <View style={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Decorative gradient background */}
         <LinearGradient
           colors={['rgba(123,47,255,0.15)', 'transparent']}
@@ -99,8 +104,29 @@ export default function LoginScreen() {
 
         {/* OAuth Sign In button */}
         <Pressable
-          style={styles.signInBtn}
-          onPress={() => promptAsync()}
+          style={[styles.signInBtn, (!request || isLoading) && { opacity: 0.5 }]}
+          onPress={async () => {
+            if (isLoading) return;
+            try {
+              // Shopify's hosted login/create-account page is a JS SPA. On
+              // Android, Custom Tabs defaults to whatever the device's
+              // default browser is — some OEM browsers render it as a
+              // stripped-down sign-in-only form, dropping the "create
+              // account" link that a fully-capable Chrome renders. Force
+              // Chrome when it's available so the page renders consistently
+              // with iOS's Safari-based auth session.
+              let browserPackage: string | undefined;
+              if (Platform.OS === 'android') {
+                const { browserPackages } = await WebBrowser.getCustomTabsSupportingBrowsersAsync();
+                if (browserPackages.includes('com.android.chrome')) {
+                  browserPackage = 'com.android.chrome';
+                }
+              }
+              await promptAsync({ showInRecents: true, browserPackage });
+            } catch (error) {
+              console.error("Login attempt failed:", error);
+            }
+          }}
           disabled={!request || isLoading}
         >
           <LinearGradient
@@ -116,21 +142,32 @@ export default function LoginScreen() {
           )}
         </Pressable>
 
-        {/* Biometric prompt */}
-        <Pressable style={styles.biometricBtn} onPress={tryBiometricLogin}>
-          <Text style={styles.biometricText}>🔐 Sign in with Face ID / Touch ID</Text>
-        </Pressable>
-
         <Text style={styles.disclaimer}>
-          By signing in, you agree to our Terms of Service and Privacy Policy.
-          Your Shopify account secures all data.
+          By signing in, you agree to our{' '}
+          <Text
+            style={styles.disclaimerLink}
+            onPress={() => Linking.openURL(TERMS_URL)}
+          >
+            Terms of Service
+          </Text>{' '}
+          and{' '}
+          <Text
+            style={styles.disclaimerLink}
+            onPress={() => Linking.openURL(PRIVACY_URL)}
+          >
+            Privacy Policy
+          </Text>
+          . Your Shopify account secures all data.
         </Text>
 
         {/* Skip */}
-        <Pressable style={styles.skipBtn} onPress={() => router.back()}>
+        <Pressable
+          style={styles.skipBtn}
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))}
+        >
           <Text style={styles.skipText}>Continue as Guest</Text>
         </Pressable>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -141,11 +178,12 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.bg.primary,
   },
   container: {
-    flex: 1,
+    flexGrow: 1,
     paddingHorizontal: Spacing[6],
     paddingTop: Spacing[8],
+    paddingBottom: Spacing[8],
     alignItems: 'center',
-    gap: Spacing[6],
+    gap: Spacing[8], // Increased from Spacing[6] to create more room
   },
   bgGradient: {
     position: 'absolute',
@@ -209,27 +247,16 @@ const styles = StyleSheet.create({
     color: Colors.white,
     zIndex: 1,
   },
-  biometricBtn: {
-    width: '100%',
-    height: 48,
-    borderRadius: BorderRadius.xl,
-    backgroundColor: Colors.bg.elevated,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: Colors.border.default,
-  },
-  biometricText: {
-    fontFamily: FontFamily.interSemiBold,
-    fontSize: FontSize.base,
-    color: Colors.text.primary,
-  },
   disclaimer: {
     fontFamily: FontFamily.interRegular,
     fontSize: FontSize.xs,
     color: Colors.text.muted,
     textAlign: 'center',
     lineHeight: 18,
+  },
+  disclaimerLink: {
+    color: Colors.brand.violet,
+    textDecorationLine: 'underline',
   },
   skipBtn: { paddingVertical: Spacing[3] },
   skipText: {

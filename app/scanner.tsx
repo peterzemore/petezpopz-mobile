@@ -1,254 +1,149 @@
 // PetezPopz — Barcode Scanner Screen
-// Uses react-native-vision-camera v5 (built-in object/code scanning)
-// Scans UPC/EAN barcodes and searches Shopify by SKU.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Pressable,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import {
-  Camera,
-  useCameraDevice,
-  useCameraPermission,
-  useObjectOutput,
-  type ScannedObject,
-  type ScannedCode,
-  type ScannedObjectType,
-} from 'react-native-vision-camera';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withRepeat,
-  withTiming,
-  Easing,
-} from 'react-native-reanimated';
+import { Camera, useCameraDevice, useCameraPermission, useCodeScanner } from 'react-native-vision-camera';
+import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing } from 'react-native-reanimated';
+
 import { Colors } from '../src/theme/colors';
 import { FontFamily, FontSize } from '../src/theme/typography';
 import { Spacing, BorderRadius } from '../src/theme/spacing';
 import { searchProductBySKU } from '../src/api/queries/products';
 
-type ScanState = 'idle' | 'scanning' | 'found' | 'not_found';
+type ScanState = 'idle' | 'scanning' | 'found' | 'not_found' | 'error';
 
-// Barcode types supported by VisionCamera v5
-const BARCODE_TYPES: ScannedObjectType[] = [
-  'ean-13',
-  'ean-8',
-  'upc-e',
-  'code-128',
-  'code-39',
-  'qr',
-];
+const LOOKUP_TIMEOUT_MS = 10_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error('Lookup timed out')), ms),
+    ),
+  ]);
+}
 
 export default function ScannerScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('back');
 
   const [scanState, setScanState] = useState<ScanState>('idle');
   const [lastScan, setLastScan] = useState<string | null>(null);
-  const [isActive, setIsActive] = useState(true);
-
-  // Use a ref to track scan state inside the callback without stale closures
   const scanStateRef = useRef<ScanState>('idle');
-  const lastScanRef = useRef<string | null>(null);
-
-  // Laser sweep animation
   const laserY = useSharedValue(0);
-  const laserStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: laserY.value }],
-  }));
+  const laserStyle = useAnimatedStyle(() => ({ transform: [{ translateY: laserY.value }] }));
 
   useEffect(() => {
-    laserY.value = withRepeat(
-      withTiming(200, { duration: 1800, easing: Easing.inOut(Easing.sin) }),
-      -1,
-      true,
-    );
+    laserY.value = withRepeat(withTiming(200, { duration: 1800, easing: Easing.inOut(Easing.sin) }), -1, true);
+    if (!hasPermission) requestPermission();
   }, []);
 
-  useEffect(() => {
-    if (!hasPermission) {
-      requestPermission();
+  // Resets both the ref the scan-gate actually checks AND the render state —
+  // previously "Scan Again" only reset the render state, leaving the ref
+  // stuck so every scan after the first miss was silently ignored forever.
+  const resetToIdle = useCallback(() => {
+    scanStateRef.current = 'idle';
+    setScanState('idle');
+    setLastScan(null);
+  }, []);
+
+  const handleCodeScanned = useCallback(async (codes: { value?: string }[]) => {
+  const raw = codes[0]?.value;
+  // Ensure we only scan if we have a value and are in 'idle' state
+  if (!raw || scanStateRef.current !== 'idle') return;
+
+  scanStateRef.current = 'scanning';
+  setScanState('scanning');
+  setLastScan(raw);
+
+  try {
+    const result = await withTimeout(searchProductBySKU(raw), LOOKUP_TIMEOUT_MS);
+
+    // Safely extract the products array
+    const products = result?.data?.products?.nodes;
+
+    if (Array.isArray(products) && products.length > 0) {
+      // Success: Reset state and navigate
+      scanStateRef.current = 'idle';
+      router.replace(`/product/${products[0].handle}`);
+    } else {
+      // Not found: Update UI
+      scanStateRef.current = 'not_found';
+      setScanState('not_found');
     }
-  }, [hasPermission]);
+  } catch (err) {
+    console.error('[Scanner] lookup error:', err);
+    // Land on a distinct, camera-paused state instead of silently resetting to
+    // 'idle' — the previous behavior re-triggered the same failing lookup on
+    // every frame as long as the barcode stayed in view, which looked like the
+    // app was stuck "thinking" forever with no visible error.
+    scanStateRef.current = 'error';
+    setScanState('error');
+  }
+}, [router]);
 
-  const handleObjectsScanned = useCallback(
-    async (objects: ScannedObject[]) => {
-      // Filter to only ScannedCode objects (barcodes) which have a `value`
-      const codes = objects.filter(
-        (o): o is ScannedCode => 'value' in o && typeof (o as ScannedCode).value === 'string',
-      );
-
-      const code = codes[0]?.value;
-      if (
-        !code ||
-        code === lastScanRef.current ||
-        scanStateRef.current === 'scanning'
-      ) {
-        return;
-      }
-
-      lastScanRef.current = code;
-      scanStateRef.current = 'scanning';
-      setLastScan(code);
-      setScanState('scanning');
-      setIsActive(false);
-
-      try {
-        const result = await searchProductBySKU(code);
-        const products = result.data.products.nodes;
-
-        if (products.length > 0) {
-          scanStateRef.current = 'found';
-          setScanState('found');
-          setTimeout(() => {
-            router.replace(`/product/${products[0].handle}`);
-          }, 600);
-        } else {
-          scanStateRef.current = 'not_found';
-          setScanState('not_found');
-          setTimeout(() => {
-            scanStateRef.current = 'idle';
-            lastScanRef.current = null;
-            setScanState('idle');
-            setLastScan(null);
-            setIsActive(true);
-          }, 3000);
-        }
-      } catch {
-        scanStateRef.current = 'idle';
-        lastScanRef.current = null;
-        setScanState('idle');
-        setLastScan(null);
-        setIsActive(true);
-      }
-    },
-    [router],
-  );
-
-  // VisionCamera v5: useObjectOutput replaces useBarcodeScanner
-  const objectOutput = useObjectOutput({
-    types: BARCODE_TYPES,
-    onObjectsScanned: handleObjectsScanned,
+  const codeScanner = useCodeScanner({
+    codeTypes: ['ean-13', 'ean-8', 'upc-a', 'upc-e', 'code-128', 'code-39', 'qr'],
+    onCodeScanned: handleCodeScanned,
   });
 
-  if (!hasPermission) {
-    return (
-      <View style={styles.permContainer}>
-        <Text style={styles.permIcon}>📷</Text>
-        <Text style={styles.permTitle}>Camera Permission Required</Text>
-        <Text style={styles.permSub}>
-          Allow camera access to scan product barcodes.
-        </Text>
-        <Pressable style={styles.permBtn} onPress={requestPermission}>
-          <Text style={styles.permBtnText}>Grant Permission</Text>
-        </Pressable>
-      </View>
-    );
-  }
-
-  if (!device) {
-    return (
-      <View style={styles.permContainer}>
-        <Text style={styles.permTitle}>No Camera Found</Text>
-      </View>
-    );
-  }
+  if (!hasPermission || !device) return <View style={styles.container} />;
 
   return (
     <View style={styles.container}>
-      {/* Camera view — V5 API: pass outputs array */}
       <Camera
         style={StyleSheet.absoluteFill}
         device={device}
-        isActive={isActive}
-        outputs={[objectOutput]}
+        isActive={scanState === 'idle' || scanState === 'scanning'}
+        codeScanner={codeScanner}
       />
 
-      {/* Dark overlay with cutout effect */}
       <View style={styles.overlay}>
-        {/* Top darken */}
-        <View style={styles.overlayTop} />
-
-        {/* Middle row: dark | viewfinder | dark */}
+        <View style={styles.overlayTop}>
+          <Pressable
+            style={[styles.closeBtn, { top: insets.top + Spacing[3] }]}
+            onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))}
+            hitSlop={12}
+          >
+            <Text style={styles.closeBtnText}>✕</Text>
+          </Pressable>
+        </View>
         <View style={styles.overlayMiddle}>
           <View style={styles.overlaySide} />
-
-          {/* Viewfinder box */}
           <View style={styles.viewfinder}>
-            {/* Corner brackets */}
-            {(['tl', 'tr', 'bl', 'br'] as const).map((corner) => (
-              <View
-                key={corner}
-                style={[
-                  styles.corner,
-                  corner.includes('t') ? styles.cornerTop : styles.cornerBottom,
-                  corner.includes('l') ? styles.cornerLeft : styles.cornerRight,
-                ]}
-              />
-            ))}
-
-            {/* Laser sweep */}
+            <View style={[styles.corner, styles.cornerTop, styles.cornerLeft]} />
+            <View style={[styles.corner, styles.cornerTop, styles.cornerRight]} />
+            <View style={[styles.corner, styles.cornerBottom, styles.cornerLeft]} />
+            <View style={[styles.corner, styles.cornerBottom, styles.cornerRight]} />
             <Animated.View style={[styles.laser, laserStyle]} />
-
-            {/* Scan state feedback */}
-            {scanState === 'scanning' && (
-              <View style={styles.stateOverlay}>
-                <ActivityIndicator color={Colors.brand.violet} size="large" />
-                <Text style={styles.stateText}>Searching catalog...</Text>
-              </View>
-            )}
-            {scanState === 'found' && (
-              <View style={[styles.stateOverlay, styles.foundOverlay]}>
-                <Text style={styles.stateIconLarge}>✅</Text>
-                <Text style={styles.stateText}>Product found!</Text>
-              </View>
-            )}
           </View>
-
           <View style={styles.overlaySide} />
         </View>
 
-        {/* Bottom darken + instructions */}
         <View style={styles.overlayBottom}>
-          {scanState === 'not_found' ? (
+          {scanState === 'not_found' || scanState === 'error' ? (
             <View style={styles.notFoundToast}>
-              <Text style={styles.notFoundTitle}>😔 Item not found online</Text>
-              <Text style={styles.notFoundSub}>
-                Ask an associate at the counter for help!
+              <Text style={styles.notFoundTitle}>
+                {scanState === 'error' ? '⚠️ Lookup failed' : '😔 Product not found'}
               </Text>
+              <Pressable onPress={resetToIdle} style={styles.rescanBtn}>
+                <Text style={styles.rescanText}>Scan Again</Text>
+              </Pressable>
+            </View>
+          ) : scanState === 'scanning' ? (
+            <View style={styles.notFoundToast}>
+              <ActivityIndicator color={Colors.brand.violet} />
+              <Text style={styles.instructions}>Looking up product…</Text>
             </View>
           ) : (
-            <Text style={styles.instructions}>
-              {scanState === 'idle' || scanState === 'scanning'
-                ? 'Point camera at a barcode to search our catalog'
-                : ''}
-            </Text>
+            <Text style={styles.instructions}>Point camera at a barcode</Text>
           )}
-
           <View style={styles.skuDisplay}>
             {lastScan && <Text style={styles.skuText}>SKU: {lastScan}</Text>}
           </View>
-
-          {/* Reset button */}
-          {scanState === 'not_found' && (
-            <Pressable
-              style={styles.rescanBtn}
-              onPress={() => {
-                scanStateRef.current = 'idle';
-                lastScanRef.current = null;
-                setScanState('idle');
-                setLastScan(null);
-                setIsActive(true);
-              }}
-            >
-              <Text style={styles.rescanText}>🔄 Scan Again</Text>
-            </Pressable>
-          )}
         </View>
       </View>
     </View>
@@ -261,153 +156,34 @@ const CORNER_THICKNESS = 4;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.black },
-  permContainer: {
-    flex: 1,
-    backgroundColor: Colors.bg.primary,
+  overlay: { flex: 1 },
+  overlayTop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)' },
+  closeBtn: {
+    position: 'absolute',
+    left: Spacing[4],
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.5)',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: Spacing[8],
-    gap: Spacing[4],
   },
-  permIcon: { fontSize: 56 },
-  permTitle: {
-    fontFamily: FontFamily.outfitBold,
-    fontSize: FontSize.xl,
-    color: Colors.text.primary,
-    textAlign: 'center',
-  },
-  permSub: {
-    fontFamily: FontFamily.interRegular,
-    fontSize: FontSize.base,
-    color: Colors.text.secondary,
-    textAlign: 'center',
-  },
-  permBtn: {
-    backgroundColor: Colors.brand.violet,
-    borderRadius: BorderRadius.full,
-    paddingHorizontal: Spacing[8],
-    paddingVertical: Spacing[4],
-  },
-  permBtnText: {
-    fontFamily: FontFamily.interBold,
-    color: Colors.white,
-    fontSize: FontSize.base,
-  },
-
-  // Overlay
-  overlay: { flex: 1 },
-  overlayTop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-  },
-  overlayMiddle: {
-    flexDirection: 'row',
-    height: VIEWFINDER_SIZE,
-  },
-  overlaySide: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-  },
-  viewfinder: {
-    width: VIEWFINDER_SIZE,
-    height: VIEWFINDER_SIZE,
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  overlayBottom: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    alignItems: 'center',
-    paddingTop: Spacing[6],
-    gap: Spacing[4],
-    paddingHorizontal: Spacing[6],
-  },
-
-  // Corners
-  corner: {
-    position: 'absolute',
-    width: CORNER_SIZE,
-    height: CORNER_SIZE,
-    borderColor: Colors.brand.violet,
-  },
+  closeBtnText: { color: Colors.white, fontSize: 20, fontWeight: 'bold' },
+  overlayMiddle: { flexDirection: 'row', height: VIEWFINDER_SIZE },
+  overlaySide: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)' },
+  viewfinder: { width: VIEWFINDER_SIZE, height: VIEWFINDER_SIZE, position: 'relative' },
+  overlayBottom: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', alignItems: 'center', paddingTop: Spacing[6], gap: Spacing[4] },
+  corner: { position: 'absolute', width: CORNER_SIZE, height: CORNER_SIZE, borderColor: Colors.brand.violet },
   cornerTop: { top: 0, borderTopWidth: CORNER_THICKNESS },
   cornerBottom: { bottom: 0, borderBottomWidth: CORNER_THICKNESS },
   cornerLeft: { left: 0, borderLeftWidth: CORNER_THICKNESS },
   cornerRight: { right: 0, borderRightWidth: CORNER_THICKNESS },
-
-  // Laser
-  laser: {
-    position: 'absolute',
-    left: 8,
-    right: 8,
-    height: 2,
-    backgroundColor: Colors.brand.violet,
-    shadowColor: Colors.brand.violet,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-
-  // State overlays
-  stateOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(10,10,18,0.7)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing[2],
-  },
-  foundOverlay: { backgroundColor: 'rgba(34,197,94,0.2)' },
-  stateIconLarge: { fontSize: 48 },
-  stateText: {
-    fontFamily: FontFamily.interBold,
-    fontSize: FontSize.sm,
-    color: Colors.white,
-  },
-
-  // Bottom info
-  instructions: {
-    fontFamily: FontFamily.interRegular,
-    fontSize: FontSize.base,
-    color: 'rgba(255,255,255,0.7)',
-    textAlign: 'center',
-  },
+  laser: { position: 'absolute', left: 8, right: 8, height: 2, backgroundColor: Colors.brand.violet, elevation: 4 },
+  instructions: { color: 'rgba(255,255,255,0.7)', textAlign: 'center' },
   skuDisplay: { minHeight: 24 },
-  skuText: {
-    fontFamily: FontFamily.interMedium,
-    fontSize: FontSize.sm,
-    color: 'rgba(255,255,255,0.5)',
-  },
-  rescanBtn: {
-    backgroundColor: Colors.brand.violet,
-    borderRadius: BorderRadius.full,
-    paddingHorizontal: Spacing[6],
-    paddingVertical: Spacing[3],
-  },
-  rescanText: {
-    fontFamily: FontFamily.interBold,
-    fontSize: FontSize.base,
-    color: Colors.white,
-  },
-  notFoundToast: {
-    backgroundColor: Colors.bg.elevated,
-    borderRadius: BorderRadius.xl,
-    padding: Spacing[5],
-    alignItems: 'center',
-    gap: Spacing[2],
-    borderWidth: 1,
-    borderColor: Colors.border.default,
-    width: '100%',
-  },
-  notFoundTitle: {
-    fontFamily: FontFamily.outfitBold,
-    fontSize: FontSize.md,
-    color: Colors.text.primary,
-  },
-  notFoundSub: {
-    fontFamily: FontFamily.interRegular,
-    fontSize: FontSize.sm,
-    color: Colors.text.secondary,
-    textAlign: 'center',
-  },
+  skuText: { color: 'rgba(255,255,255,0.5)' },
+  rescanBtn: { backgroundColor: Colors.brand.violet, padding: Spacing[3], borderRadius: BorderRadius.full },
+  rescanText: { color: Colors.white, fontWeight: 'bold' },
+  notFoundToast: { backgroundColor: Colors.bg.elevated, padding: Spacing[5], borderRadius: BorderRadius.xl, alignItems: 'center' },
+  notFoundTitle: { color: Colors.text.primary, fontWeight: 'bold' }
 });

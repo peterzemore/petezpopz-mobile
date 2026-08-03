@@ -18,7 +18,6 @@ import { FontFamily, FontSize } from '../../theme/typography';
 import { Spacing, BorderRadius } from '../../theme/spacing';
 import { fetchPromoBanners } from '../../api/queries/collections';
 import { Product } from '../../api/shopify-storefront';
-import { filterVisibleProducts } from '../../utils/productFilters';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const BANNER_WIDTH = SCREEN_W - Spacing[8];
@@ -27,6 +26,8 @@ const AUTO_SCROLL_MS = 4000;
 export function PromoCarousel() {
   const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
+  const [heading, setHeading] = useState('');
+  const [isExclusive, setIsExclusive] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeIndex, setActiveIndex] = useState(0);
   const flatRef = useRef<FlatList>(null);
@@ -34,9 +35,10 @@ export function PromoCarousel() {
 
   useEffect(() => {
     fetchPromoBanners()
-      .then((res) => {
-        const nodes = (res.data.collection?.products.nodes ?? []) as Product[];
-        setProducts(filterVisibleProducts(nodes));
+      .then((feed) => {
+        setProducts(feed.products);
+        setHeading(feed.title);
+        setIsExclusive(feed.isExclusive);
       })
       .catch(console.warn)
       .finally(() => setLoading(false));
@@ -66,6 +68,14 @@ export function PromoCarousel() {
 
   return (
     <View style={styles.container}>
+      {/* Heading lives here, not on the home screen, so the label and the
+          products it describes can never drift out of sync. */}
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionLabel}>
+          {isExclusive ? '🔥' : '✨'} {heading.toUpperCase()}
+        </Text>
+      </View>
+
       <FlatList
         ref={flatRef}
         data={products}
@@ -96,7 +106,10 @@ export function PromoCarousel() {
               style={StyleSheet.absoluteFill}
             />
             <View style={styles.bannerContent}>
-              {item.tags.includes('App-Exclusive') && (
+              {/* Membership in the App Exclusive collection is what makes an
+                  item exclusive — the old per-product "App-Exclusive" tag was
+                  never applied to anything, so this pill never rendered. */}
+              {isExclusive && (
                 <View style={styles.exclusivePill}>
                   <Text style={styles.exclusiveText}>📱 APP EXCLUSIVE</Text>
                 </View>
@@ -125,6 +138,14 @@ export function PromoCarousel() {
 
 const styles = StyleSheet.create({
   container: { marginTop: Spacing[4] },
+  // Mirrors the section heading styling used across the home screen.
+  sectionHeader: { paddingHorizontal: Spacing[4], marginBottom: Spacing[2] },
+  sectionLabel: {
+    fontFamily: FontFamily.interBold,
+    fontSize: FontSize.xs,
+    color: Colors.brand.violet,
+    letterSpacing: 2,
+  },
   loader: {
     height: 200,
     alignItems: 'center',

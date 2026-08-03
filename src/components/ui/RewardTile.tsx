@@ -23,14 +23,14 @@ export interface RedemptionTier {
 interface Props {
   tier: RedemptionTier;
   userPoints: number;
+  redeemed: boolean;
   onRedeem?: (tier: RedemptionTier) => Promise<void>;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-export function RewardTile({ tier, userPoints, onRedeem }: Props) {
+export function RewardTile({ tier, userPoints, redeemed, onRedeem }: Props) {
   const [loading, setLoading] = useState(false);
-  const [redeemed, setRedeemed] = useState(false);
 
   const canRedeem = userPoints >= tier.points && !redeemed;
   const progress = Math.min(userPoints / tier.points, 1);
@@ -44,7 +44,6 @@ export function RewardTile({ tier, userPoints, onRedeem }: Props) {
     setLoading(true);
     try {
       await onRedeem(tier);
-      setRedeemed(true);
       Alert.alert('🎉 Reward Unlocked!', `Your code ${tier.code} has been applied to your cart.`);
     } catch {
       Alert.alert('Error', 'Could not apply reward. Please try again.');

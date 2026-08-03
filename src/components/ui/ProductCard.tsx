@@ -11,6 +11,9 @@ import { Product } from '../../api/shopify-storefront';
 import { ScarcityBadge } from './ScarcityBadge';
 import { useCartStore } from '../../store/cartStore';
 import { useWishlistStore } from '../../store/wishlistStore';
+import { useAuthStore } from '../../store/authStore';
+import { isMember, applyMemberDiscount, resolveMembership } from '../../api/queries/customer';
+import { hasTag, VIP_ONLY_TAG } from '../../api/taxonomy';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -24,6 +27,7 @@ export function ProductCard({ product, showQuickAdd = false, onQuickAdd }: Props
   const router = useRouter();
   const addItem = useCartStore((s) => s.addItem);
   const hasItem = useWishlistStore((s) => s.hasItem);
+  const membershipTier = useAuthStore((s) => s.membershipTier);
 
   const scale = useSharedValue(1);
   const cardStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
@@ -34,7 +38,10 @@ export function ProductCard({ product, showQuickAdd = false, onQuickAdd }: Props
   const compareAt = variant?.compareAtPrice ? parseFloat(variant.compareAtPrice.amount) : null;
   const discount = compareAt ? Math.round(((compareAt - price) / compareAt) * 100) : null;
   const minInventory = Math.min(...product.variants.nodes.map((v) => v.quantityAvailable ?? 999));
-  const isVIP = product.tags.some((t) => t === 'VIP_Only:True');
+  const isPaidMember = isMember(membershipTier);
+  const memberPrice = applyMemberDiscount(price, membershipTier);
+  const membership = resolveMembership(membershipTier);
+  const isVIP = hasTag(product.tags, VIP_ONLY_TAG);
   const isWishlisted = hasItem(product.id);
 
   const handlePress = () => {
@@ -45,7 +52,7 @@ export function ProductCard({ product, showQuickAdd = false, onQuickAdd }: Props
     if (onQuickAdd) {
       onQuickAdd(product);
     } else if (variant) {
-      addItem(variant.id);
+      addItem(variant.id, 1, { product });
     }
   };
 
@@ -97,11 +104,23 @@ export function ProductCard({ product, showQuickAdd = false, onQuickAdd }: Props
         <Text style={styles.title} numberOfLines={2}>{product.title}</Text>
 
         <View style={styles.priceRow}>
-          <Text style={styles.price}>${price.toFixed(2)}</Text>
-          {compareAt && (
-            <Text style={styles.compareAt}>${compareAt.toFixed(2)}</Text>
+          {isPaidMember ? (
+            <>
+              <Text style={styles.price}>${memberPrice.toFixed(2)}</Text>
+              <Text style={styles.compareAt}>${price.toFixed(2)}</Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.price}>${price.toFixed(2)}</Text>
+              {compareAt && (
+                <Text style={styles.compareAt}>${compareAt.toFixed(2)}</Text>
+              )}
+            </>
           )}
         </View>
+        {isPaidMember && (
+          <Text style={styles.vipLabel}>{membership.emoji} {membership.label} Price</Text>
+        )}
 
         {showQuickAdd && (
           <Pressable style={styles.quickAddBtn} onPress={handleQuickAdd}>
@@ -199,6 +218,13 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     color: Colors.text.muted,
     textDecorationLine: 'line-through',
+  },
+  vipLabel: {
+    fontFamily: FontFamily.interBold,
+    fontSize: 10,
+    color: Colors.tier.vaulted,
+    letterSpacing: 0.3,
+    marginTop: 1,
   },
   quickAddBtn: {
     marginTop: Spacing[2],

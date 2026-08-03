@@ -13,11 +13,13 @@ import Animated, {
 import { Colors } from '../../theme/colors';
 import { FontFamily, FontSize } from '../../theme/typography';
 import { Spacing, BorderRadius } from '../../theme/spacing';
-import { VIP_THRESHOLD, getLoyaltyTier } from '../../api/queries/customer';
+import { isMember, MEMBERSHIPS } from '../../api/queries/customer';
 import { useRouter } from 'expo-router';
 
 interface Props {
-  loyaltyPoints: number;
+  // Early access is a paid membership perk now, not something earned by
+  // spending. Any paid tier unlocks it — see MEMBERSHIPS in queries/customer.
+  membershipTier: string;
   launchTimeTag?: string; // e.g. "Launch_Time:2026-07-15-10:00"
   isVIPOnly: boolean;
   children: React.ReactNode;
@@ -40,8 +42,8 @@ function formatCountdown(ms: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-export function VIPLockOverlay({ loyaltyPoints, launchTimeTag, isVIPOnly, children }: Props) {
-  const isVIP = loyaltyPoints >= VIP_THRESHOLD;
+export function VIPLockOverlay({ membershipTier, launchTimeTag, isVIPOnly, children }: Props) {
+  const isVIP = isMember(membershipTier);
   const router = useRouter();
 
   const [countdown, setCountdown] = useState<string>('');
@@ -78,7 +80,7 @@ export function VIPLockOverlay({ loyaltyPoints, launchTimeTag, isVIPOnly, childr
       <View style={{ position: 'relative' }}>
         {isVIPOnly && (
           <View style={styles.vipActiveBadge}>
-            <Text style={styles.vipActiveText}>✨ VIP PRE-ORDER</Text>
+            <Text style={styles.vipActiveText}>✨ MEMBER EARLY ACCESS</Text>
           </View>
         )}
         {children}
@@ -86,9 +88,7 @@ export function VIPLockOverlay({ loyaltyPoints, launchTimeTag, isVIPOnly, childr
     );
   }
 
-  const pointsNeeded = VIP_THRESHOLD - loyaltyPoints;
-
-  // Non-VIP — show locked overlay
+  // Not a paid member — show locked overlay
   return (
     <View style={styles.wrapper}>
       <View style={styles.childWrap}>{children}</View>
@@ -105,11 +105,11 @@ export function VIPLockOverlay({ loyaltyPoints, launchTimeTag, isVIPOnly, childr
 
         <View style={styles.lockContent}>
           <Text style={styles.lockIcon}>🔒</Text>
-          <Text style={styles.lockTitle}>VIP Early Access</Text>
+          <Text style={styles.lockTitle}>Member Early Access</Text>
 
           {launchDate && countdown ? (
             <>
-              <Text style={styles.countdownLabel}>Unlocks for VIPs in</Text>
+              <Text style={styles.countdownLabel}>Unlocks for members in</Text>
               <View style={styles.countdownBox}>
                 <Text style={styles.countdown}>{countdown}</Text>
               </View>
@@ -119,16 +119,16 @@ export function VIPLockOverlay({ loyaltyPoints, launchTimeTag, isVIPOnly, childr
 
           <View style={styles.earnBox}>
             <Text style={styles.earnText}>
-              Earn{' '}
+              Join{' '}
               <Text style={{ color: Colors.tier.vaulted, fontFamily: FontFamily.outfitBold }}>
-                {pointsNeeded} more points
+                {MEMBERSHIPS.platinum.label}
               </Text>
-              {'\n'}to unlock first dibs
+              {'\n'}for early access to every drop
             </Text>
           </View>
 
           <Pressable style={styles.earnBtn} onPress={() => router.push('/(tabs)/rewards')}>
-            <Text style={styles.earnBtnText}>⭐ View Rewards Hub</Text>
+            <Text style={styles.earnBtnText}>👑 See Membership</Text>
           </Pressable>
         </View>
       </View>

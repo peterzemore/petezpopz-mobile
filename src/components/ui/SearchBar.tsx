@@ -54,6 +54,12 @@ export function SearchBar({ onResultsChange, autoFocus }: Props) {
     onResultsChange?.(text);
   };
 
+  const handleSubmit = () => {
+    const trimmed = query.trim();
+    if (!trimmed) return;
+    router.push({ pathname: '/search', params: { q: trimmed } });
+  };
+
   const handleScannerOpen = () => {
     router.push('/scanner');
   };
@@ -71,6 +77,7 @@ export function SearchBar({ onResultsChange, autoFocus }: Props) {
         onChangeText={handleSearch}
         onFocus={handleFocus}
         onBlur={handleBlur}
+        onSubmitEditing={handleSubmit}
         autoFocus={autoFocus}
         returnKeyType="search"
         autoCapitalize="none"

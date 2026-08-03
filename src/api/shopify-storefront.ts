@@ -16,24 +16,27 @@
 //             + Shopify-Store-Domain, Shopify-Client-Id
 // ─────────────────────────────────────────────────────────────────────────────
 
+// The store's permanent domain. "gemcitytoyco.myshopify.com" is a legacy
+// alias from before the store was renamed — it still resolves to the same
+// shop, but the current permanent domain is the one to rely on.
 const STORE_DOMAIN =
-  process.env.EXPO_PUBLIC_SHOPIFY_STORE_DOMAIN ?? 'gemcitytoyco.myshopify.com';
+  process.env.EXPO_PUBLIC_SHOPIFY_STORE_DOMAIN ?? 'sugarcreektoys.myshopify.com';
 const CLIENT_ID =
   process.env.EXPO_PUBLIC_SHOPIFY_CUSTOMER_CLIENT_ID ?? '';
 const STOREFRONT_TOKEN =
   process.env.EXPO_PUBLIC_SHOPIFY_STOREFRONT_ACCESS_TOKEN ?? '';
+const API_VERSION =
+  process.env.EXPO_PUBLIC_SHOPIFY_STOREFRONT_API_VERSION ?? '2026-04';
 
 // Public storefront (products, collections, cart)
-const STOREFRONT_ENDPOINT = `https://${STORE_DOMAIN}/api/2026-04/graphql.json`;
+const STOREFRONT_ENDPOINT = `https://${STORE_DOMAIN}/api/${API_VERSION}/graphql.json`;
 
 // Customer Account API (authenticated profile/orders)
 const CUSTOMER_API_ENDPOINT =
   process.env.EXPO_PUBLIC_SHOPIFY_CUSTOMER_GRAPHQL_URL ??
-  'https://shopify.com/api/2026-04/graphql';
+  `https://shopify.com/api/${API_VERSION}/graphql`;
 
 // ── Base headers ──────────────────────────────────────────────────────────────
-
-/** Headers for public storefront requests (uses public Storefront API access token). */
 function storefrontHeaders(): Record<string, string> {
   return {
     'Content-Type': 'application/json',
@@ -41,18 +44,26 @@ function storefrontHeaders(): Record<string, string> {
     'X-Shopify-Storefront-Access-Token': STOREFRONT_TOKEN,
   };
 }
-
-/** Headers for authenticated Customer Account API requests. */
 function customerHeaders(accessToken: string): Record<string, string> {
+  // The Customer Account API requires the token itself (with its shcat_
+  // prefix) as the ENTIRE Authorization header value — no "Bearer " prefix.
+  // Confirmed against Shopify's own docs/dev community (2026-07-17): sending
+  // "Bearer shcat_..." makes the raw header value start with "Bearer", which
+  // is why the API's error message ("missing prefix shcat_") kept firing even
+  // though the token itself genuinely had the prefix — the check is on the
+  // full header value, not just the token substring.
+  const formattedToken = accessToken.startsWith('shcat_')
+    ? accessToken
+    : `shcat_${accessToken}`;
+
   return {
     'Content-Type': 'application/json',
     Accept: 'application/json',
     'Shopify-Store-Domain': STORE_DOMAIN,
     'Shopify-Client-Id': CLIENT_ID,
-    Authorization: `Bearer ${accessToken}`,
+    Authorization: formattedToken,
   };
 }
-
 // ── Error types ───────────────────────────────────────────────────────────────
 
 export interface GraphQLError {

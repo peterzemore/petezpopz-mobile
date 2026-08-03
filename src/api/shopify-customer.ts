@@ -1,15 +1,3 @@
-// PetezPopz — Customer Account API: PKCE OAuth + Token Management
-//
-// This file handles ONLY the OAuth lifecycle:
-//   useShopifyAuth()         → PKCE auth request hook
-//   exchangeCodeForTokens()  → authorization code → access + refresh tokens
-//   refreshAccessToken()     → silent refresh
-//   saveTokens / getStoredTokens / clearTokens / isTokenExpired
-//
-// The GraphQL transport (customerFetch) lives in shopify-storefront.ts.
-// The client secret is NOT present — PKCE is the correct flow for public clients.
-// There are no static storefront tokens anywhere in this file.
-
 import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import * as SecureStore from 'expo-secure-store';
@@ -17,32 +5,57 @@ import * as SecureStore from 'expo-secure-store';
 WebBrowser.maybeCompleteAuthSession();
 
 // ── Config ─────────────────────────────────────────────────────────────────────
+const CLIENT_ID = process.env.EXPO_PUBLIC_SHOPIFY_CUSTOMER_CLIENT_ID ?? '';
 
-const CLIENT_ID =
-  process.env.EXPO_PUBLIC_SHOPIFY_CUSTOMER_CLIENT_ID ?? '';
-const STORE_DOMAIN =
-  process.env.EXPO_PUBLIC_SHOPIFY_STORE_DOMAIN ?? 'gemcitytoyco.myshopify.com';
-const REDIRECT_URI =
-  process.env.EXPO_PUBLIC_SHOPIFY_OAUTH_REDIRECT_URI ?? 'petezpopz://auth/callback';
-const AUTH_BASE =
-  process.env.EXPO_PUBLIC_SHOPIFY_CUSTOMER_API_URL ??
-  `https://shopify.com/authentication/${STORE_DOMAIN}/oauth`;
+// Base URL for the Customer Account API's OAuth endpoints, e.g.
+// https://account.petezpopz.com/authentication/oauth
+const OAUTH_BASE = process.env.EXPO_PUBLIC_SHOPIFY_CUSTOMER_API_URL ?? '';
 
-// ── PKCE Discovery Document (2026-04) ─────────────────────────────────────────
+// Must exactly match the "Callback URI" configured in the Customer Account API
+// credentials (a custom scheme, not a web URL) — e.g. shop.55261102144.app://callback
+const REDIRECT_URI = process.env.EXPO_PUBLIC_SHOPIFY_OAUTH_REDIRECT_URI ?? '';
 
+const LOGOUT_ENDPOINT = process.env.EXPO_PUBLIC_SHOPIFY_LOGOUT_ENDPOINT ?? '';
+
+const DELETE_ACCOUNT_URL = process.env.EXPO_PUBLIC_DELETE_ACCOUNT_URL ?? '';
+const REDEEM_POINTS_URL = process.env.EXPO_PUBLIC_REDEEM_POINTS_URL ?? '';
+const SUBSCRIBE_URL = process.env.EXPO_PUBLIC_SUBSCRIBE_MARKETING_URL ?? '';
+
+// The Customer Account API endpoints are fixed and provided directly by the
+// Shopify admin (Headless app → Customer Account API credentials), so we build
+// the discovery document manually rather than relying on autodiscovery against
+// the storefront domain, which does not serve this app's OAuth metadata.
 const DISCOVERY: AuthSession.DiscoveryDocument = {
-  authorizationEndpoint: `${AUTH_BASE}/authorize`,
-  tokenEndpoint:         `${AUTH_BASE}/token`,
-  revocationEndpoint:    `${AUTH_BASE}/revoke`,
+  authorizationEndpoint: `${OAUTH_BASE}/authorize`,
+  tokenEndpoint: `${OAUTH_BASE}/token`,
+  revocationEndpoint: LOGOUT_ENDPOINT || undefined,
 };
 
 // ── Secure token storage ───────────────────────────────────────────────────────
 
 const KEYS = {
-  ACCESS:  'ppz_access_token',
+  ACCESS: 'ppz_access_token',
   REFRESH: 'ppz_refresh_token',
-  EXPIRY:  'ppz_token_expiry',
+  EXPIRY: 'ppz_token_expiry',
+  PKCE_VERIFIER: 'ppz_pkce_verifier',
 } as const;
+
+// expo-auth-session's redirect completion is unreliable in standalone Android
+// builds (works in a dev client, breaks in a real APK) — the deep link arrives
+// but WebBrowser's auth-session interception doesn't catch it, so it falls
+// through to normal app routing instead. The PKCE code_verifier otherwise only
+// lives in-memory on the AuthRequest object tied to the screen that started
+// the flow, so it must be persisted here for a fallback route (app/callback.tsx)
+// to be able to complete the token exchange when that happens.
+export async function savePendingVerifier(verifier: string): Promise<void> {
+  await SecureStore.setItemAsync(KEYS.PKCE_VERIFIER, verifier);
+}
+
+export async function getAndClearPendingVerifier(): Promise<string | null> {
+  const verifier = await SecureStore.getItemAsync(KEYS.PKCE_VERIFIER);
+  await SecureStore.deleteItemAsync(KEYS.PKCE_VERIFIER);
+  return verifier;
+}
 
 export async function saveTokens(
   accessToken: string,
@@ -51,114 +64,230 @@ export async function saveTokens(
 ): Promise<void> {
   const expiry = Date.now() + expiresIn * 1000;
   await Promise.all([
-    SecureStore.setItemAsync(KEYS.ACCESS,  accessToken),
+    SecureStore.setItemAsync(KEYS.ACCESS, accessToken),
     SecureStore.setItemAsync(KEYS.REFRESH, refreshToken),
-    SecureStore.setItemAsync(KEYS.EXPIRY,  String(expiry)),
+    SecureStore.setItemAsync(KEYS.EXPIRY, String(expiry)),
   ]);
 }
 
-export async function getStoredTokens(): Promise<{
-  accessToken: string | null;
-  refreshToken: string | null;
-  expiresAt: number | null;
-}> {
+export async function getStoredTokens() {
   const [accessToken, refreshToken, expiryStr] = await Promise.all([
     SecureStore.getItemAsync(KEYS.ACCESS),
     SecureStore.getItemAsync(KEYS.REFRESH),
     SecureStore.getItemAsync(KEYS.EXPIRY),
   ]);
-  return {
-    accessToken,
-    refreshToken,
-    expiresAt: expiryStr ? Number(expiryStr) : null,
-  };
+  return { accessToken, refreshToken, expiresAt: expiryStr ? Number(expiryStr) : null };
 }
 
 export async function clearTokens(): Promise<void> {
   await Promise.all(Object.values(KEYS).map((k) => SecureStore.deleteItemAsync(k)));
 }
 
+// Treat tokens as expired slightly early to avoid using one that dies mid-request
+const EXPIRY_SAFETY_MARGIN_MS = 60_000;
+
 export function isTokenExpired(expiresAt: number | null): boolean {
   if (!expiresAt) return true;
-  return Date.now() >= expiresAt - 60_000; // 60 s pre-expiry buffer
+  return Date.now() + EXPIRY_SAFETY_MARGIN_MS >= expiresAt;
 }
 
 // ── OAuth 2.0 PKCE Hook ────────────────────────────────────────────────────────
-// Scopes: openid + email for identity, customer-account-api:full for all
-// customer data access (orders, addresses, metafields via appMetafields API).
 
 export function useShopifyAuth() {
-  const [request, response, promptAsync] = AuthSession.useAuthRequest(
+  // If this config is missing (e.g. a build's environment variables weren't
+  // set), expo-auth-session silently falls back to auto-generating its own
+  // redirect URI from the app's first registered URL scheme — which doesn't
+  // match what's registered with Shopify. That produces a confusing
+  // "Unmatched Route" 404 *after* the user has already gone through Shopify's
+  // sign-in flow, instead of failing clearly up front. Fail loudly instead.
+  if (!CLIENT_ID || !REDIRECT_URI || !OAUTH_BASE) {
+    throw new Error(
+      'Shopify OAuth is misconfigured: missing EXPO_PUBLIC_SHOPIFY_CUSTOMER_CLIENT_ID, ' +
+      'EXPO_PUBLIC_SHOPIFY_OAUTH_REDIRECT_URI, or EXPO_PUBLIC_SHOPIFY_CUSTOMER_API_URL. ' +
+      'Check this build\'s environment variables.',
+    );
+  }
+
+  return AuthSession.useAuthRequest(
     {
-      clientId:            CLIENT_ID,
-      redirectUri:         REDIRECT_URI,
-      scopes:              ['openid', 'email', 'customer-account-api:full'],
-      responseType:        AuthSession.ResponseType.Code,
+      clientId: CLIENT_ID,
+      redirectUri: REDIRECT_URI,
+      scopes: ['openid', 'email', 'customer-account-api:full'],
+      responseType: AuthSession.ResponseType.Code,
       codeChallengeMethod: AuthSession.CodeChallengeMethod.S256,
     },
     DISCOVERY,
   );
-  return { request, response, promptAsync };
 }
-
 // ── Authorization code → tokens ────────────────────────────────────────────────
 
-export async function exchangeCodeForTokens(
-  code: string,
-  codeVerifier: string,
-): Promise<{ accessToken: string; refreshToken: string; expiresIn: number }> {
+export async function exchangeCodeForTokens(code: string, codeVerifier: string) {
   const body = new URLSearchParams({
-    grant_type:    'authorization_code',
-    client_id:     CLIENT_ID,
-    redirect_uri:  REDIRECT_URI,
+    grant_type: 'authorization_code',
+    client_id: CLIENT_ID,
+    redirect_uri: REDIRECT_URI,
     code,
     code_verifier: codeVerifier,
   });
 
   const res = await fetch(DISCOVERY.tokenEndpoint!, {
-    method:  'POST',
+    method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body:    body.toString(),
+    body: body.toString(),
   });
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`PKCE token exchange failed (${res.status}): ${text}`);
-  }
+  if (!res.ok) throw new Error(`PKCE token exchange failed: ${await res.text()}`);
 
   const json = await res.json();
+
   return {
-    accessToken:  json.access_token,
+    accessToken: json.access_token,
     refreshToken: json.refresh_token,
-    expiresIn:    json.expires_in ?? 3600,
+    expiresIn: json.expires_in ?? 3600,
   };
 }
 
-// ── Silent refresh ─────────────────────────────────────────────────────────────
+// ── Refresh access token ───────────────────────────────────────────────────────
 
-export async function refreshAccessToken(
-  refreshToken: string,
-): Promise<{ accessToken: string; refreshToken: string; expiresIn: number }> {
+export async function refreshAccessToken(refreshToken: string) {
   const body = new URLSearchParams({
-    grant_type:    'refresh_token',
-    client_id:     CLIENT_ID,
+    grant_type: 'refresh_token',
+    client_id: CLIENT_ID,
     refresh_token: refreshToken,
   });
 
   const res = await fetch(DISCOVERY.tokenEndpoint!, {
-    method:  'POST',
+    method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body:    body.toString(),
+    body: body.toString(),
   });
 
-  if (!res.ok) {
-    throw new Error(`PKCE token refresh failed (${res.status})`);
-  }
+  if (!res.ok) throw new Error(`Token refresh failed: ${await res.text()}`);
 
   const json = await res.json();
+
   return {
-    accessToken:  json.access_token,
+    accessToken: json.access_token,
     refreshToken: json.refresh_token ?? refreshToken,
-    expiresIn:    json.expires_in ?? 3600,
+    expiresIn: json.expires_in ?? 3600,
   };
+}
+
+// ── Delete account (via barcode-proxy's delete-account endpoint) ─────────────
+// The Customer Account API access token can't delete the account itself —
+// only the Admin API can, and that token must never live in the mobile app.
+// This calls the server-side proxy, which verifies the token belongs to the
+// caller before deleting. See barcode-proxy/api/delete-account.js.
+
+export async function deleteAccountFromShopify(accessToken: string): Promise<void> {
+  if (!DELETE_ACCOUNT_URL) {
+    throw new Error(
+      'Account deletion is misconfigured: missing EXPO_PUBLIC_DELETE_ACCOUNT_URL. ' +
+      'Check this build\'s environment variables.',
+    );
+  }
+
+  const res = await fetch(DELETE_ACCOUNT_URL, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!res.ok) throw new Error(`Account deletion failed: ${await res.text()}`);
+}
+
+// ── Redeem loyalty points for a discount code ────────────────────────────────
+
+export interface RedemptionResult {
+  /** Unique, single-use code locked to this customer. */
+  code: string;
+  discountUSD: number;
+  pointsSpent: number;
+  /** Authoritative balance after the debit, straight from Shopify. */
+  newBalance: number;
+  expiresAt: string;
+}
+
+/**
+ * Spends points server-side and returns a freshly minted discount code.
+ *
+ * The balance check and the debit both happen on the server — the app can't
+ * be trusted with either, since it runs on the customer's phone. See
+ * barcode-proxy/api/redeem-points.js for why the old shared REWARDS* codes
+ * were replaced.
+ */
+export async function redeemPointsForCode(
+  accessToken: string,
+  points: number,
+): Promise<RedemptionResult> {
+  if (!REDEEM_POINTS_URL) {
+    throw new Error(
+      'Rewards redemption is misconfigured: missing EXPO_PUBLIC_REDEEM_POINTS_URL. ' +
+      'Check this build\'s environment variables.',
+    );
+  }
+
+  const res = await fetch(REDEEM_POINTS_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ points }),
+  });
+
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body?.error || 'Redemption failed');
+  return body as RedemptionResult;
+}
+
+// ── Sign out (revoke session at the Customer Account API) ────────────────────
+
+export async function logoutFromShopify(): Promise<void> {
+  if (!LOGOUT_ENDPOINT || !CLIENT_ID) return;
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    await fetch(`${LOGOUT_ENDPOINT}?id_token_hint=${encodeURIComponent(CLIENT_ID)}`, {
+      method: 'GET',
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeout));
+  } catch {
+    // Non-critical (including a timeout) — local tokens are cleared regardless
+  }
+}
+
+// ── Marketing opt-in (unlocks the free Silver tier) ──────────────────────────
+
+/**
+ * Opts the signed-in customer into email or SMS marketing.
+ *
+ * Consent can only be written with the Admin API, so this goes through the
+ * proxy, which resolves the customer from their own token. It does not set the
+ * membership tier — Shopify fires customers/update, and the membership
+ * service promotes them to Silver. Keeping that decision in one place stops
+ * the app and the service disagreeing about who qualifies.
+ */
+export async function subscribeToMarketing(
+  accessToken: string,
+  channel: 'email' | 'sms' = 'email',
+): Promise<{ ok: boolean; channel: string; state?: string }> {
+  if (!SUBSCRIBE_URL) {
+    throw new Error(
+      'Subscribing is misconfigured: missing EXPO_PUBLIC_SUBSCRIBE_MARKETING_URL. ' +
+      'Check this build\'s environment variables.',
+    );
+  }
+
+  const res = await fetch(SUBSCRIBE_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ channel }),
+  });
+
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body?.error || 'Could not subscribe');
+  return body;
 }

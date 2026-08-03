@@ -69,7 +69,7 @@ EXPO_PUBLIC_SHOPIFY_STOREFRONT_TOKEN=your_token_here
 
 The Customer Account API credentials are already filled in:
 - Client ID: `b2686c7d161c4dd5e2b99337d214e56b`
-- Store: `gemcitytoyco.myshopify.com`
+- Store: `sugarcreektoys.myshopify.com`
 
 ### 2. Register OAuth Redirect URI
 

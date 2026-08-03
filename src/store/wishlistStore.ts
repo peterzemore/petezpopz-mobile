@@ -7,6 +7,12 @@ import { Product } from '../api/shopify-storefront';
 
 export interface WishlistItem {
   id: string;
+  // The variant to add to cart. Shopify's cart API requires a ProductVariant
+  // ID, not a Product ID (`id` above) — these are different object types, so
+  // "Add to Cart" here must never use `id` directly. May be missing on items
+  // saved before this field existed; toybox.tsx falls back to re-fetching the
+  // product by handle in that case.
+  variantId: string | null;
   handle: string;
   title: string;
   imageUrl: string | null;
@@ -28,6 +34,7 @@ interface WishlistState {
 function productToWishlistItem(product: Product): WishlistItem {
   return {
     id: product.id,
+    variantId: product.variants.nodes[0]?.id ?? null,
     handle: product.handle,
     title: product.title,
     imageUrl: product.images.nodes[0]?.url ?? null,

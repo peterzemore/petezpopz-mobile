@@ -135,6 +135,12 @@ export async function applyDiscountCode(cartId: string, code: string) {
   }>(CART_DISCOUNT_CODES_UPDATE, { cartId, discountCodes: [code] });
 }
 
+export async function removeDiscountCode(cartId: string) {
+  return storefrontFetch<{
+    cartDiscountCodesUpdate: { cart: Cart; userErrors: Array<{ field: string; message: string }> };
+  }>(CART_DISCOUNT_CODES_UPDATE, { cartId, discountCodes: [] });
+}
+
 // ── Update cart note + attributes (BOPIS) ─────────────────────────────────────
 
 export const CART_NOTE_UPDATE = `

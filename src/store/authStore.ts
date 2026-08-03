@@ -4,8 +4,10 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   clearTokens,
+  deleteAccountFromShopify,
   getStoredTokens,
   isTokenExpired,
+  logoutFromShopify,
   refreshAccessToken,
   saveTokens,
 } from '../api/shopify-customer';
@@ -19,6 +21,11 @@ interface AuthState {
   customer: CustomerProfile | null;
   loyaltyPoints: number;
   loyaltyTier: LoyaltyTier;
+  // Lifetime order spend — VIP status is based on this, NOT loyaltyPoints,
+  // so redeeming points for a discount never costs someone VIP status.
+  lifetimeSpend: number;
+  /** "silver" | "gold" | "platinum" — from custom.membership_tier. */
+  membershipTier: string;
 
   // Actions
   setTokens: (accessToken: string, refreshToken: string, expiresIn: number) => Promise<void>;
@@ -26,6 +33,7 @@ interface AuthState {
   refreshSession: () => Promise<boolean>;
   fetchProfile: () => Promise<void>;
   logout: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
 }
 
 const DEFAULT_TIER: LoyaltyTier = {
@@ -46,6 +54,8 @@ export const useAuthStore = create<AuthState>()(
       customer: null,
       loyaltyPoints: 0,
       loyaltyTier: DEFAULT_TIER,
+      lifetimeSpend: 0,
+      membershipTier: 'silver',
 
       setTokens: async (accessToken, refreshToken, expiresIn) => {
         await saveTokens(accessToken, refreshToken, expiresIn);
@@ -73,8 +83,9 @@ export const useAuthStore = create<AuthState>()(
             set({ accessToken, refreshToken, isAuthenticated: true });
             await get().fetchProfile();
           }
-        } catch {
-          set({ isAuthenticated: false });
+        } catch (err) {
+          // If anything fails, simply ensure we are logged out
+          set({ isAuthenticated: false, isLoading: false });
         } finally {
           set({ isLoading: false });
         }
@@ -102,16 +113,28 @@ export const useAuthStore = create<AuthState>()(
         try {
           const result = await fetchCustomer(accessToken);
           const customer = result.data.customer;
-          // Read via named aliases that mirror [[extensions.metafields]] declarations
+          // customer.loyaltyPoints is a GraphQL alias for the custom.loyalty_points metafield
           const rawPoints = Number(customer.loyaltyPoints?.value ?? 0);
           const tier = getLoyaltyTier(rawPoints);
-          set({ customer, loyaltyPoints: rawPoints, loyaltyTier: tier });
+          // Kept for display only — perks are driven by membershipTier now.
+          const spend = Number(customer.lifetimeSpend?.value ?? 0);
+          // Written by the membership service on subscription billing/cancel.
+          // Null means "never subscribed", which resolves to Silver downstream.
+          const membership = String(customer.membershipTier?.value ?? 'silver').toLowerCase();
+          set({
+            customer,
+            loyaltyPoints: rawPoints,
+            loyaltyTier: tier,
+            lifetimeSpend: spend,
+            membershipTier: membership,
+          });
         } catch (err) {
           console.warn('Failed to fetch customer profile:', err);
         }
       },
 
       logout: async () => {
+        await logoutFromShopify();
         await clearTokens();
         set({
           isAuthenticated: false,
@@ -120,6 +143,25 @@ export const useAuthStore = create<AuthState>()(
           customer: null,
           loyaltyPoints: 0,
           loyaltyTier: DEFAULT_TIER,
+          lifetimeSpend: 0,
+          membershipTier: 'silver',
+        });
+      },
+
+      deleteAccount: async () => {
+        const { accessToken } = get();
+        if (!accessToken) throw new Error('Not signed in');
+        await deleteAccountFromShopify(accessToken);
+        await clearTokens();
+        set({
+          isAuthenticated: false,
+          accessToken: null,
+          refreshToken: null,
+          customer: null,
+          loyaltyPoints: 0,
+          loyaltyTier: DEFAULT_TIER,
+          lifetimeSpend: 0,
+          membershipTier: 'silver',
         });
       },
     }),
@@ -127,11 +169,16 @@ export const useAuthStore = create<AuthState>()(
       name: 'ppz-auth-store',
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
-        // Only persist non-sensitive state — actual tokens live in SecureStore
-        isAuthenticated: state.isAuthenticated,
+        // isAuthenticated is deliberately NOT persisted — it must always be
+        // freshly derived from whether a real token exists in SecureStore
+        // (via loadSession() on every launch), never trusted from a cached
+        // flag. A stale `true` here with no matching valid token is exactly
+        // what produces "looks signed in but sign in/out don't work."
         customer: state.customer,
         loyaltyPoints: state.loyaltyPoints,
         loyaltyTier: state.loyaltyTier,
+        lifetimeSpend: state.lifetimeSpend,
+        membershipTier: state.membershipTier,
       }),
     },
   ),

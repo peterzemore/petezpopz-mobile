@@ -10,16 +10,19 @@
       "env": {
         "APP_ENV": "development",
         "npm_config_legacy_peer_deps": "true"
-      }
+      },
+      "channel": "development"
     },
     "preview": {
       "distribution": "internal",
-      "ios": {
-        "simulator": true
-      }
+      "android": {
+        "buildType": "apk"
+      },
+      "channel": "preview"
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "channel": "production"
     }
   },
   "submit": {

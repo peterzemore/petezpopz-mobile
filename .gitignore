@@ -16,3 +16,4 @@ expo-env.d.ts
 # Native folders
 /ios
 /android
+.env.local

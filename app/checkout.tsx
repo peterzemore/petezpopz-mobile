@@ -37,6 +37,7 @@ export default function CheckoutScreen() {
     toggleBOPIS,
     removeItem,
     updateItem,
+    removeCode,
     isLoading,
   } = useCartStore();
   const { loyaltyPoints } = useAuthStore();
@@ -182,7 +183,16 @@ export default function CheckoutScreen() {
               <Text style={[styles.summaryLabel, { color: Colors.success }]}>
                 🎟️ {d.code}
               </Text>
-              <Text style={[styles.summaryValue, { color: Colors.success }]}>Applied</Text>
+              <View style={styles.discountRight}>
+                <Text style={[styles.summaryValue, { color: Colors.success }]}>Applied</Text>
+                <Pressable
+                  onPress={() => removeCode()}
+                  disabled={isLoading}
+                  hitSlop={8}
+                >
+                  <Text style={styles.removeCodeText}>✕</Text>
+                </Pressable>
+              </View>
             </View>
           ))}
           <View style={[styles.summaryRow, styles.summaryTotalRow]}>
@@ -381,6 +391,16 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.interMedium,
     fontSize: FontSize.base,
     color: Colors.text.primary,
+  },
+  discountRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing[3],
+  },
+  removeCodeText: {
+    fontFamily: FontFamily.interBold,
+    fontSize: FontSize.sm,
+    color: Colors.text.muted,
   },
   summaryTotalRow: {
     borderTopWidth: 1,

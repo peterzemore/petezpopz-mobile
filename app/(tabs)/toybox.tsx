@@ -1,5 +1,5 @@
 // PetezPopz — Wishlist "Toy Box" Screen (Tab 3)
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   Pressable,
   Alert,
   Share,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -18,10 +19,37 @@ import { FontFamily, FontSize } from '../../src/theme/typography';
 import { Spacing, BorderRadius, Shadow } from '../../src/theme/spacing';
 import { useWishlistStore, WishlistItem } from '../../src/store/wishlistStore';
 import { useCartStore } from '../../src/store/cartStore';
+import { fetchProductByHandle } from '../../src/api/queries/products';
 
 function WishlistCard({ item, onRemove }: { item: WishlistItem; onRemove: () => void }) {
   const router = useRouter();
   const addItem = useCartStore((s) => s.addItem);
+  const [addingToCart, setAddingToCart] = useState(false);
+
+  const handleAddToCart = async () => {
+    setAddingToCart(true);
+    try {
+      // Shopify's cart API needs a ProductVariant ID, not the Product ID this
+      // wishlist entry is keyed by. Older saved items may not have variantId
+      // at all (added before this field existed) — re-fetch by handle in that
+      // case instead of sending an invalid ID that Shopify would reject.
+      let variantId = item.variantId;
+      if (!variantId) {
+        const res = await fetchProductByHandle(item.handle);
+        variantId = res.data.product?.variants.nodes[0]?.id ?? null;
+      }
+      if (!variantId) {
+        Alert.alert('Unavailable', 'This item could not be added to your cart. Try removing and re-adding it.');
+        return;
+      }
+      await addItem(variantId);
+      Alert.alert('✅ Added to Cart', `${item.title} is in your cart!`);
+    } catch {
+      Alert.alert('Error', 'Could not add to cart.');
+    } finally {
+      setAddingToCart(false);
+    }
+  };
 
   return (
     <Animated.View entering={FadeInDown} exiting={FadeOutRight} style={styles.card}>
@@ -48,8 +76,12 @@ function WishlistCard({ item, onRemove }: { item: WishlistItem; onRemove: () => 
       </Pressable>
 
       <View style={styles.cardActions}>
-        <Pressable style={styles.addToCartBtn} onPress={() => addItem(item.id)}>
-          <Text style={styles.addToCartText}>🛒 Add to Cart</Text>
+        <Pressable style={styles.addToCartBtn} onPress={handleAddToCart} disabled={addingToCart}>
+          {addingToCart ? (
+            <ActivityIndicator size="small" color={Colors.brand.violet} />
+          ) : (
+            <Text style={styles.addToCartText}>🛒 Add to Cart</Text>
+          )}
         </Pressable>
         <Pressable style={styles.removeBtn} onPress={onRemove}>
           <Text style={styles.removeText}>✕</Text>

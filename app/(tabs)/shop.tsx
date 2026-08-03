@@ -1,5 +1,5 @@
 // PetezPopz — Fandom Grid / Shop Screen (Tab 2)
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Colors } from '../../src/theme/colors';
 import { FontFamily, FontSize } from '../../src/theme/typography';
 import { Spacing, BorderRadius } from '../../src/theme/spacing';
@@ -17,9 +18,29 @@ import { FUNKO_CATEGORIES, LOUNGEFLY_CATEGORIES } from '../../src/api/queries/co
 type BrandTab = 'funko' | 'loungefly';
 
 export default function ShopScreen() {
+  const router = useRouter();
+  const { brand } = useLocalSearchParams<{ brand?: string }>();
   const [activeTab, setActiveTab] = useState<BrandTab>('funko');
 
+  // Lets the Home screen's "Shop All Funko/Loungefly" cards deep-link into
+  // the right tab here, since this is where products are actually separated by tag.
+  useEffect(() => {
+    if (brand === 'funko' || brand === 'loungefly') {
+      setActiveTab(brand);
+    }
+  }, [brand]);
+
   const categories = activeTab === 'funko' ? FUNKO_CATEGORIES : LOUNGEFLY_CATEGORIES;
+
+  const handleBrowseAll = () => {
+    if (activeTab === 'loungefly') {
+      // The Loungefly line is identified by the "Loungefly" product tag, not a
+      // single curated collection, so browse-all queries by tag directly.
+      router.push('/tag/Loungefly');
+    } else {
+      router.push('/collection/funko-pops');
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -70,6 +91,8 @@ export default function ShopScreen() {
                 label={cat.label}
                 handle={cat.handle}
                 emoji={cat.emoji}
+                tagOnly
+                requireTag={cat.tag}
               />
             ))}
             {/* Pad last row if odd count */}
@@ -80,7 +103,7 @@ export default function ShopScreen() {
         {/* Browse All button */}
         <Pressable
           style={styles.browseAllBtn}
-          onPress={() => {}}
+          onPress={handleBrowseAll}
         >
           <Text style={styles.browseAllText}>
             Browse All {activeTab === 'funko' ? 'Funko Pops' : 'Loungefly'} →

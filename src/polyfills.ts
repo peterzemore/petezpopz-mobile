@@ -36,4 +36,26 @@ if (typeof Event !== 'undefined' && Event.prototype) {
   });
 }
 
+// TEMPORARY DIAGNOSTIC — tracking down a recurring
+// "TypeError: Cannot read property 'nodes' of undefined" warning that never
+// shows a stack trace in the terminal. Forces the full stack to print
+// whenever console.warn/error receives an Error object, regardless of how the
+// original call site logged it (e.g. console.warn(err) alone often doesn't
+// unroll .stack in Metro's terminal reporter). Safe to remove once found.
+if (__DEV__) {
+  const patch = (fn: 'warn' | 'error') => {
+    const original = console[fn].bind(console);
+    console[fn] = (...args: unknown[]) => {
+      original(...args);
+      for (const arg of args) {
+        if (arg instanceof Error && arg.stack) {
+          original(`[full stack for above ${fn}]`, arg.stack);
+        }
+      }
+    };
+  };
+  patch('warn');
+  patch('error');
+}
+
 export {};

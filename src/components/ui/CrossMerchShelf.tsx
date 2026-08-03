@@ -49,7 +49,7 @@ function CrossMerchCard({ product }: { product: Product }) {
   const handleQuickAdd = async () => {
     if (!variant) return;
     scale.value = withSequence(withSpring(0.9), withSpring(1.05), withSpring(1));
-    await addItem(variant.id);
+    await addItem(variant.id, 1, { product });
     setAdded(true);
     setTimeout(() => setAdded(false), 2000);
   };
@@ -94,7 +94,7 @@ export function CrossMerchShelf({ currentProduct }: Props) {
     }
 
     fetchCrossMerchProducts(tag, currentProduct.id)
-      .then((res) => setProducts(filterVisibleProducts(res.data.products.nodes)))
+      .then((res) => setProducts(filterVisibleProducts(res.data.products?.nodes ?? [])))
       .catch(console.warn)
       .finally(() => setLoading(false));
   }, [currentProduct.id]);

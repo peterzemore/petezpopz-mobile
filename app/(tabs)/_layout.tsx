@@ -1,6 +1,7 @@
 // PetezPopz — Tab Bar Layout
 import { Tabs } from 'expo-router';
 import { View, Text, StyleSheet, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import { Colors } from '../../src/theme/colors';
 import { FontFamily, FontSize } from '../../src/theme/typography';
@@ -31,12 +32,19 @@ function TabIcon({ emoji, label, focused, badgeCount }: TabIconProps) {
 
 export default function TabLayout() {
   const cartQty = useCartStore((s) => s.totalQuantity());
+  const insets = useSafeAreaInsets();
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle: styles.tabBar,
+        tabBarStyle: [
+          styles.tabBar,
+          {
+            height: 56 + Math.max(insets.bottom, Platform.OS === 'ios' ? 24 : 10),
+            paddingBottom: Math.max(insets.bottom, Platform.OS === 'ios' ? 24 : 10),
+          },
+        ],
         tabBarBackground: () =>
           Platform.OS === 'ios' ? (
             <BlurView
@@ -95,8 +103,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     borderTopWidth: 1,
     borderTopColor: Colors.border.default,
-    height: Platform.OS === 'ios' ? 88 : 76,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 10,
     paddingTop: 6,
     backgroundColor: 'transparent',
     elevation: 0,

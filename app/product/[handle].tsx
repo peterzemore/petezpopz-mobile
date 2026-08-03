@@ -1,26 +1,8 @@
 // PetezPopz — Product Detail Page (PDP)
 import React, { useEffect, useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  Dimensions,
-  ActivityIndicator,
-  Alert,
-  FlatList,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Dimensions, ActivityIndicator, Alert, FlatList, Linking } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-  withSequence,
-  withTiming,
-} from 'react-native-reanimated';
 import { Colors } from '../../src/theme/colors';
 import { FontFamily, FontSize } from '../../src/theme/typography';
 import { Spacing, BorderRadius, Shadow } from '../../src/theme/spacing';
@@ -32,16 +14,19 @@ import { ScarcityBadge } from '../../src/components/ui/ScarcityBadge';
 import { useCartStore } from '../../src/store/cartStore';
 import { useWishlistStore } from '../../src/store/wishlistStore';
 import { useAuthStore } from '../../src/store/authStore';
-import { calculatePointsForPurchase } from '../../src/api/queries/customer';
+import { isMember, applyMemberDiscount, resolveMembership } from '../../src/api/queries/customer';
+import { hasTag, VIP_ONLY_TAG, LAUNCH_TIME_PREFIX } from '../../src/api/taxonomy';
 
 const { width: W } = Dimensions.get('window');
 
 export default function ProductDetailPage() {
   const { handle } = useLocalSearchParams<{ handle: string }>();
   const router = useRouter();
-  const addItem = useCartStore((s) => s.addItem);
+// Consolidate your store hooks into ONE block
+  const addToCart = useCartStore((s) => s.addItem);
+  const cartQuantity = useCartStore((s) => s.totalQuantity());
   const { addItem: addWishlist, removeItem: removeWishlist, hasItem } = useWishlistStore();
-  const { loyaltyPoints } = useAuthStore();
+  const { membershipTier } = useAuthStore();
 
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
@@ -49,11 +34,14 @@ export default function ProductDetailPage() {
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [addingToCart, setAddingToCart] = useState(false);
 
-  const isWishlisted = product ? hasItem(product.id) : false;
-
-  // Bounce animation for Add to Cart
-  const btnScale = useSharedValue(1);
-  const btnStyle = useAnimatedStyle(() => ({ transform: [{ scale: btnScale.value }] }));
+  const toggleWishlist = () => {
+    if (!product) return;
+    if (hasItem(product.id)) {
+      removeWishlist(product.id);
+    } else {
+      addWishlist(product);
+    }
+  };
 
   useEffect(() => {
     if (!handle) return;
@@ -69,61 +57,63 @@ export default function ProductDetailPage() {
 
   const handleAddToCart = useCallback(async () => {
     if (!selectedVariant) return;
-    btnScale.value = withSequence(withSpring(0.92), withSpring(1.05), withSpring(1));
     setAddingToCart(true);
     try {
-      await addItem(selectedVariant.id);
-      Alert.alert('✅ Added to Cart', `${product?.title} is in your cart!`, [
-        { text: 'Continue Shopping', style: 'cancel' },
-        { text: 'View Cart', onPress: () => router.push('/checkout') },
-      ]);
+      await addToCart(selectedVariant.id, 1, { product: product ?? undefined });
+      // The upsell sheet confirms the add itself, so only fall back to an alert
+      // when there's no companion product to offer — otherwise they stack.
+      if (!useCartStore.getState().pendingUpsell) {
+        Alert.alert('✅ Added to Cart', `${product?.title} is in your cart!`, [
+          { text: 'Keep Shopping', style: 'cancel' },
+          { text: 'View Cart', onPress: () => router.push('/checkout') },
+        ]);
+      }
     } catch {
-      Alert.alert('Error', 'Could not add to cart. Please try again.');
+      Alert.alert('Error', 'Could not add to cart.');
     } finally {
       setAddingToCart(false);
     }
-  }, [selectedVariant, product]);
+  }, [selectedVariant, product, addToCart, router]);
 
-  const toggleWishlist = () => {
+  const handleNotifyMe = useCallback(() => {
     if (!product) return;
-    if (isWishlisted) {
-      removeWishlist(product.id);
-    } else {
-      addWishlist(product);
-    }
-  };
-
-  if (loading) {
-    return (
-      <View style={styles.loader}>
-        <ActivityIndicator size="large" color={Colors.brand.violet} />
-      </View>
+    Alert.alert(
+      'Notify Me When Available',
+      `We'll open your email app with a message to our team asking to be notified when "${product.title}" is back in stock.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Email Us',
+          onPress: () => {
+            const subject = `Notify me when back in stock: ${product.title}`;
+            const body =
+              `Hi PetezPopz team,\n\n` +
+              `Please notify me when this item is back in stock:\n\n` +
+              `${product.title}\n` +
+              `https://www.petezpopz.com/products/${product.handle}\n\n` +
+              `Thanks!`;
+            const url = `mailto:support@petezpopz.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+            Linking.openURL(url).catch(() => {
+              Alert.alert('Could not open email', 'Please reach out to support@petezpopz.com directly.');
+            });
+          },
+        },
+      ],
     );
-  }
+  }, [product]);
 
-  if (!product) {
-    return (
-      <View style={styles.loader}>
-        <Text style={styles.notFoundText}>Product not found</Text>
-      </View>
-    );
-  }
+  if (loading) return <View style={styles.loader}><ActivityIndicator size="large" color={Colors.brand.violet} /></View>;
+  if (!product) return <View style={styles.loader}><Text>Product not found</Text></View>;
 
-  const images = product.images.nodes;
+  const isAvailable = product.variants.nodes.some(v => v.availableForSale);
   const price = parseFloat(selectedVariant?.price.amount ?? product.priceRange.minVariantPrice.amount);
-  const compareAt = selectedVariant?.compareAtPrice
-    ? parseFloat(selectedVariant.compareAtPrice.amount)
-    : null;
-  const pointsEarned = calculatePointsForPurchase(price);
-  const minInventory = Math.min(
-    ...product.variants.nodes.map((v) => v.quantityAvailable ?? 999),
+  const memberIsVIP = isMember(membershipTier);
+  const displayPrice = applyMemberDiscount(price, membershipTier);
+  const membership = resolveMembership(membershipTier);
+  const isVIPOnly = hasTag(product.tags, VIP_ONLY_TAG);
+  const launchTag = product.tags.find((t) =>
+    t.toLowerCase().startsWith(LAUNCH_TIME_PREFIX.toLowerCase()),
   );
-
-  const isVIPOnly = product.tags.some((t) => t === 'VIP_Only:True');
-  const launchTag = product.tags.find((t) => t.startsWith('Launch_Time:'));
-
-  // BNPL installment (Afterpay / Klarna style — 4 payments)
-  const installmentAmt = (price / 4).toFixed(2);
 
   return (
     <>
@@ -132,185 +122,110 @@ export default function ProductDetailPage() {
           headerShown: true,
           headerTransparent: true,
           headerTitle: '',
-          headerTintColor: Colors.white,
           headerRight: () => (
-            <Pressable onPress={toggleWishlist} style={{ marginRight: Spacing[4] }}>
-              <Text style={{ fontSize: 24 }}>{isWishlisted ? '❤️' : '🤍'}</Text>
+            <Pressable style={styles.headerCartBtn} onPress={() => router.push('/checkout')}>
+              <Text style={styles.headerCartIcon}>🛒</Text>
+              {cartQuantity > 0 && (
+                <View style={styles.headerCartBadge}>
+                  <Text style={styles.headerCartBadgeText}>
+                    {cartQuantity > 99 ? '99+' : cartQuantity}
+                  </Text>
+                </View>
+              )}
             </Pressable>
           ),
         }}
       />
-
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-        {/* ── Image Gallery ──────────────────────────────────── */}
+      <ScrollView style={styles.scroll}>
         <View style={styles.gallery}>
           <FlatList
-            data={images}
+            data={product.images.nodes}
             keyExtractor={(img) => img.url}
-            horizontal
+            horizontal  
             pagingEnabled
             showsHorizontalScrollIndicator={false}
-            onMomentumScrollEnd={(e) => {
-              setActiveImageIndex(Math.round(e.nativeEvent.contentOffset.x / W));
-            }}
+            onMomentumScrollEnd={(e) => 
+              setActiveImageIndex(Math.round(e.nativeEvent.contentOffset.x / W))
+            }
             renderItem={({ item }) => (
-              <Image
-                source={{ uri: item.url }}
-                style={{ width: W, height: W * 0.9 }}
-                contentFit="contain"
+              <Image 
+                source={{ uri: item.url }} 
+                style={{ width: W, height: W * 0.9 }} 
+                contentFit="contain" 
               />
             )}
           />
+  
+          {/* Optional: Add dot indicators if you have them */}
+          <View style={styles.imageDots}>
+            {product.images.nodes.map((_, index) => (
+              <View 
+                key={index} 
+                style={[styles.dot, index === activeImageIndex && styles.dotActive]} 
+              />
+            ))}
+          </View>
 
-          {/* Dot indicators */}
-          {images.length > 1 && (
-            <View style={styles.imageDots}>
-              {images.map((_, i) => (
-                <View key={i} style={[styles.dot, i === activeImageIndex && styles.dotActive]} />
-              ))}
+          <ScarcityBadge quantity={Math.min(...product.variants.nodes.map(v => v.quantityAvailable ?? 999))} />
+        </View>
+        
+        <View style={styles.infoContainer}>
+          {/* 1. OUT OF STOCK BANNER */}
+          {!isAvailable && (
+            <View style={styles.outOfStockBanner}>
+              <Text style={styles.outOfStockTitle}>Currently Out of Stock</Text>
+              <Pressable style={styles.notifyBtn} onPress={handleNotifyMe}>
+                <Text style={styles.notifyText}>Notify Me When Available</Text>
+              </Pressable>
             </View>
           )}
 
-          {/* Scarcity overlay */}
-          <ScarcityBadge quantity={minInventory} />
-        </View>
-
-        {/* ── Product Info ───────────────────────────────────── */}
-        <View style={styles.infoContainer}>
-          {/* VIP Gate Wrapper */}
-          <VIPLockOverlay
-            loyaltyPoints={loyaltyPoints}
-            isVIPOnly={isVIPOnly}
-            launchTimeTag={launchTag}
-          >
-            {/* Vendor + Title */}
+          <VIPLockOverlay membershipTier={membershipTier} isVIPOnly={isVIPOnly} launchTimeTag={launchTag}>
             <Text style={styles.vendor}>{product.vendor}</Text>
             <Text style={styles.productTitle}>{product.title}</Text>
 
-            {/* Price row */}
-            <View style={styles.priceRow}>
-              <Text style={styles.price}>${price.toFixed(2)}</Text>
-              {compareAt && (
-                <Text style={styles.compareAt}>${compareAt.toFixed(2)}</Text>
-              )}
-              {compareAt && (
-                <View style={styles.discountPill}>
-                  <Text style={styles.discountPillText}>
-                    -{Math.round(((compareAt - price) / compareAt) * 100)}%
-                  </Text>
+            {/* 2. PRICE & ACTION BAR */}
+            <View style={styles.actionContainer}>
+              <View style={styles.priceContainer}>
+                <Text style={styles.priceLabel}>{memberIsVIP ? '✨ VIP PRICE' : 'Price'}</Text>
+                <View style={styles.priceRow}>
+                  {memberIsVIP && (
+                    <Text style={styles.compareAt}>${price.toFixed(2)}</Text>
+                  )}
+                  <Text style={styles.priceAmount}>${displayPrice.toFixed(2)}</Text>
                 </View>
-              )}
-            </View>
-
-            {/* BNPL */}
-            <View style={styles.bnplRow}>
-              <Text style={styles.bnplText}>
-                💳 Or 4 payments of ${installmentAmt} with{' '}
-                <Text style={{ color: Colors.brand.rose }}>Afterpay</Text>
-              </Text>
-            </View>
-
-            {/* Loyalty earn hook */}
-            <View style={styles.loyaltyHook}>
-              <Text style={styles.loyaltyHookText}>
-                ⭐ Earn{' '}
-                <Text style={{ color: Colors.tier.vaulted, fontFamily: FontFamily.outfitBold }}>
-                  {pointsEarned} Reward Points
-                </Text>{' '}
-                on this item
-              </Text>
-            </View>
-
-            {/* Variant selector */}
-            {product.variants.nodes.length > 1 && (
-              <View style={styles.variantSection}>
-                <Text style={styles.variantLabel}>Select Option:</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View style={styles.variantRow}>
-                    {product.variants.nodes.map((variant) => (
-                      <Pressable
-                        key={variant.id}
-                        style={[
-                          styles.variantPill,
-                          selectedVariant?.id === variant.id && styles.variantPillActive,
-                          !variant.availableForSale && styles.variantPillSoldOut,
-                        ]}
-                        onPress={() => variant.availableForSale && setSelectedVariant(variant)}
-                      >
-                        <Text
-                          style={[
-                            styles.variantPillText,
-                            selectedVariant?.id === variant.id && styles.variantPillTextActive,
-                          ]}
-                        >
-                          {variant.title}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                </ScrollView>
               </View>
-            )}
 
-            {/* Add to Cart button */}
-            <Animated.View style={[btnStyle, styles.ctaRow]}>
-              <Pressable
-                style={[
-                  styles.addToCartBtn,
-                  !selectedVariant?.availableForSale && styles.addToCartBtnDisabled,
-                ]}
-                onPress={handleAddToCart}
-                disabled={addingToCart || !selectedVariant?.availableForSale}
-              >
-                <LinearGradient
-                  colors={[Colors.brand.violet, Colors.brand.rose]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={StyleSheet.absoluteFill}
-                />
-                {addingToCart ? (
-                  <ActivityIndicator color={Colors.white} />
-                ) : (
-                  <Text style={styles.addToCartText}>
-                    {selectedVariant?.availableForSale ? '🛒 Add to Cart' : '⛔ Sold Out'}
-                  </Text>
+              <View style={styles.row}>
+                {isAvailable && (
+                  <Pressable
+                    style={[styles.primaryBtn, addingToCart && { opacity: 0.6 }]}
+                    onPress={handleAddToCart}
+                    disabled={addingToCart}
+                  >
+                    {addingToCart ? (
+                      <ActivityIndicator color={Colors.white} />
+                    ) : (
+                      <Text style={styles.btnText}>Add to Cart</Text>
+                    )}
+                  </Pressable>
                 )}
-              </Pressable>
-
-              <Pressable
-                style={styles.wishlistBtn}
-                onPress={toggleWishlist}
-              >
-                <Text style={styles.wishlistBtnText}>{isWishlisted ? '❤️' : '🤍'}</Text>
-              </Pressable>
-            </Animated.View>
-
-            {/* Checkout shortcut */}
-            <Pressable
-              style={styles.checkoutNowBtn}
-              onPress={() => {
-                handleAddToCart().then(() => router.push('/checkout'));
-              }}
-            >
-              <Text style={styles.checkoutNowText}>⚡ Buy Now</Text>
-            </Pressable>
-
-            {/* Description */}
-            <View style={styles.descriptionSection}>
-              <Text style={styles.descLabel}>PRODUCT DETAILS</Text>
-              <Text style={styles.description}>{product.description}</Text>
+                <Pressable style={styles.wishlistBtn} onPress={toggleWishlist}>
+                  <Text style={styles.heart}>{hasItem(product.id) ? "❤️" : "🤍"}</Text>
+                </Pressable>
+              </View>
             </View>
+            
+            <Text style={styles.description}>{product.description}</Text>
           </VIPLockOverlay>
         </View>
 
-        {/* ── Cross-Merchandising Shelf ──────────────────────── */}
         <CrossMerchShelf currentProduct={product} />
-
         <View style={{ height: 120 }} />
       </ScrollView>
     </>
-  );
-}
+  ); //
+} //
 
 const styles = StyleSheet.create({
   loader: {
@@ -462,17 +377,6 @@ const styles = StyleSheet.create({
     color: Colors.white,
     zIndex: 1,
   },
-  wishlistBtn: {
-    width: 56,
-    height: 56,
-    borderRadius: BorderRadius.xl,
-    backgroundColor: Colors.bg.elevated,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: Colors.border.default,
-  },
-  wishlistBtnText: { fontSize: 24 },
   checkoutNowBtn: {
     height: 48,
     borderRadius: BorderRadius.xl,
@@ -500,5 +404,72 @@ const styles = StyleSheet.create({
     fontSize: FontSize.base,
     color: Colors.text.secondary,
     lineHeight: 24,
+  },
+  outOfStockBanner: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    padding: Spacing[4],
+    borderRadius: BorderRadius.lg,
+    alignItems: 'center',
+    marginBottom: Spacing[4],
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.2)',
+  },
+  outOfStockTitle: {
+    fontFamily: FontFamily.outfitBold,
+    fontSize: FontSize.md,
+    color: '#ef4444',
+    marginBottom: Spacing[2],
+  },
+  notifyBtn: {
+    backgroundColor: '#ef4444',
+    paddingHorizontal: Spacing[5],
+    paddingVertical: Spacing[2],
+    borderRadius: BorderRadius.full,
+  },
+  notifyText: {
+    color: Colors.white,
+    fontFamily: FontFamily.interBold,
+  },
+  actionContainer: { 
+  marginVertical: Spacing[4], 
+  paddingVertical: Spacing[4],
+  borderTopWidth: 1, 
+  borderColor: Colors.border.default,
+  gap: Spacing[3] 
+  },
+  priceContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  priceLabel: { fontFamily: FontFamily.interBold, fontSize: FontSize.sm, color: Colors.text.muted },
+  priceAmount: { fontFamily: FontFamily.outfitBlack, fontSize: FontSize.lg, color: Colors.brand.violet },
+  row: { flexDirection: 'row', gap: Spacing[3] },
+  primaryBtn: { flex: 1, backgroundColor: Colors.brand.violet, padding: Spacing[4], borderRadius: BorderRadius.lg, alignItems: 'center' },
+  wishlistBtn: { padding: Spacing[4], backgroundColor: Colors.bg.secondary, borderRadius: BorderRadius.lg, alignItems: 'center', justifyContent: 'center' },
+  btnText: { color: Colors.white, fontFamily: FontFamily.interBold },
+  heart: { fontSize: 22 },
+  headerCartBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: Spacing[3],
+    backgroundColor: 'rgba(10,10,18,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerCartIcon: { fontSize: 20 },
+  headerCartBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: Colors.brand.rose,
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  headerCartBadgeText: {
+    fontFamily: FontFamily.interBold,
+    fontSize: 9,
+    color: Colors.white,
   },
 });

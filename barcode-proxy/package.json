@@ -1,0 +1,7 @@
+{
+  "name": "petezpopz-barcode-proxy",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Tiny Vercel serverless function — barcode → product handle via Shopify Admin API"
+}
