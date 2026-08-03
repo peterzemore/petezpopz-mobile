@@ -19,6 +19,7 @@ import { FontFamily, FontSize } from '../../src/theme/typography';
 import { Spacing, BorderRadius, Shadow } from '../../src/theme/spacing';
 import { LoyaltyGauge } from '../../src/components/ui/LoyaltyGauge';
 import { RewardTile } from '../../src/components/ui/RewardTile';
+import { MembershipUpsell } from '../../src/components/ui/MembershipUpsell';
 import { useAuthStore } from '../../src/store/authStore';
 import { useCartStore } from '../../src/store/cartStore';
 import type { Cart } from '../../src/api/shopify-storefront';
@@ -269,6 +270,9 @@ export default function RewardsScreen() {
           ))}
         </View>
 
+        {/* ── Membership upgrade / manage ────────────────────── */}
+        <MembershipUpsell membershipTier={membershipTier} onReturn={fetchProfile} />
+
         {/* ── How to Earn ───────────────────────────────────── */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>⭐ HOW TO EARN POINTS</Text>
@@ -276,7 +280,9 @@ export default function RewardsScreen() {
             { icon: '🛍️', text: '$1 spent = 1 point (rounded to nearest dollar)' },
             { icon: '📦', text: 'Points credited automatically after order fulfillment' },
             { icon: '🔄', text: 'Returns reduce your point balance accordingly' },
-            { icon: '✨', text: '500+ points unlocks VIP early access to new drops' },
+            // Early access is a Platinum perk now, not a points threshold.
+            { icon: '🥈', text: 'Subscribe to emails to unlock Silver and start earning' },
+            { icon: '👑', text: 'Early access to drops comes with Platinum membership' },
           ].map((item, i) => (
             <View key={i} style={styles.earnRow}>
               <Text style={styles.earnIcon}>{item.icon}</Text>

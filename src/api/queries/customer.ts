@@ -209,6 +209,33 @@ export const MEMBERSHIPS: Record<MembershipTier, MembershipInfo> = {
 /** Free shipping threshold for everyone else. */
 export const STANDARD_FREE_SHIPPING_OVER = 99;
 
+// Where a paid tier is actually bought. These open Shopify's hosted checkout
+// rather than an in-app purchase: Apple requires IAP for digital content but
+// forbids it for physical goods and real-world services, and this membership
+// is discounts and protectors on physical merchandise. Routing through the
+// same checkout the app already uses for orders keeps that unambiguous.
+const STORE_URL = process.env.EXPO_PUBLIC_STORE_WEB_URL ?? 'https://petezpopz.com';
+const SELLING_PLAN = process.env.EXPO_PUBLIC_MEMBERSHIP_SELLING_PLAN ?? '972193856';
+
+export const MEMBERSHIP_CHECKOUT_URL: Record<'gold' | 'platinum', string> = {
+  gold: `${STORE_URL}/products/gold-membership?selling_plan=${SELLING_PLAN}`,
+  platinum: `${STORE_URL}/products/platinum-membership?selling_plan=${SELLING_PLAN}`,
+};
+
+// Shopify's customer account area, where subscriptions, payment methods and
+// cancellation live. /account on the store just redirects here, so this points
+// straight at it. Note this is a separate web session from the app's OAuth
+// token — the customer signs in again when they open it, which Shopify's
+// hosted account area requires and the app can't bypass.
+export const MANAGE_MEMBERSHIP_URL =
+  process.env.EXPO_PUBLIC_CUSTOMER_ACCOUNT_URL ?? 'https://account.petezpopz.com';
+
+/** Monthly price shown in the app. Kept alongside the tier table so the two can't drift. */
+export const MEMBERSHIP_PRICE: Record<'gold' | 'platinum', string> = {
+  gold: '$14.99',
+  platinum: '$24.99',
+};
+
 /**
  * Normalise whatever is in the metafield to a known tier.
  *
