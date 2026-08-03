@@ -20,6 +20,7 @@ const LOGOUT_ENDPOINT = process.env.EXPO_PUBLIC_SHOPIFY_LOGOUT_ENDPOINT ?? '';
 const DELETE_ACCOUNT_URL = process.env.EXPO_PUBLIC_DELETE_ACCOUNT_URL ?? '';
 const REDEEM_POINTS_URL = process.env.EXPO_PUBLIC_REDEEM_POINTS_URL ?? '';
 const SUBSCRIBE_URL = process.env.EXPO_PUBLIC_SUBSCRIBE_MARKETING_URL ?? '';
+const SAVE_BIRTHDAY_URL = process.env.EXPO_PUBLIC_SAVE_BIRTHDAY_URL ?? '';
 
 // The Customer Account API endpoints are fixed and provided directly by the
 // Shopify admin (Headless app → Customer Account API credentials), so we build
@@ -289,5 +290,40 @@ export async function subscribeToMarketing(
 
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body?.error || 'Could not subscribe');
+  return body;
+}
+
+// ── Birthday (Platinum members get a gift code on the day) ───────────────────
+
+/**
+ * Stores the customer's birthday as month and day.
+ *
+ * Only MM-DD is sent — the year isn't needed to send a birthday gift, and
+ * holding a full date of birth is more personal data than the feature
+ * justifies. Written server-side because metafields need the Admin API.
+ */
+export async function saveBirthday(
+  accessToken: string,
+  month: number,
+  day: number,
+): Promise<{ ok: boolean; birthday: string }> {
+  if (!SAVE_BIRTHDAY_URL) {
+    throw new Error(
+      'Saving a birthday is misconfigured: missing EXPO_PUBLIC_SAVE_BIRTHDAY_URL. ' +
+      'Check this build\'s environment variables.',
+    );
+  }
+
+  const res = await fetch(SAVE_BIRTHDAY_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ month, day }),
+  });
+
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body?.error || 'Could not save birthday');
   return body;
 }

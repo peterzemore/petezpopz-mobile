@@ -1,9 +1,9 @@
 // PetezPopz — VIPDropsShelf Component
 // Horizontal shelf of VIP-only drops, sourced from the VIP_Only product tag.
 //
-// Shown to everyone on purpose: non-VIP shoppers seeing locked drops is the
-// incentive to reach the spend threshold. Access is gated on the product page
-// by VIPLockOverlay, not here.
+// Shown to everyone on purpose, signed out included: seeing the drops you
+// can't buy yet is what makes the membership worth paying for. Access is gated
+// on the product page by VIPLockOverlay, not by hiding the shelf.
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
 import { Colors } from '../../theme/colors';
@@ -16,7 +16,7 @@ import { ProductCard } from './ProductCard';
 const CARD_WIDTH = 160;
 
 interface Props {
-  /** True when the signed-in shopper has cleared the VIP spend threshold. */
+  /** True when the signed-in shopper is on a paid tier. */
   memberIsVIP?: boolean;
 }
 
@@ -42,7 +42,7 @@ export function VIPDropsShelf({ memberIsVIP = false }: Props) {
         <Text style={styles.sub}>
           {memberIsVIP
             ? 'Your early access — grab them before general release.'
-            : 'Unlocked at VIP status. Keep collecting to get in.'}
+            : 'Early access for Platinum members. Join to shop these first.'}
         </Text>
       </View>
 

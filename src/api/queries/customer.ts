@@ -54,6 +54,18 @@ export const GET_CUSTOMER = `
         value
         type
       }
+      birthday: metafield(namespace: "custom", key: "birthday") {
+        value
+        type
+      }
+      birthdayGiftCode: metafield(namespace: "custom", key: "birthday_gift_code") {
+        value
+        type
+      }
+      birthdayGiftExpires: metafield(namespace: "custom", key: "birthday_gift_expires") {
+        value
+        type
+      }
     }
   }
 `;
@@ -88,6 +100,11 @@ export interface CustomerProfile {
   // "silver" | "gold" | "platinum", written by the membership service
   // (~/Desktop/petezpopz-membership) when a subscription bills or cancels.
   membershipTier: AppMetafieldValue | null;
+  // "MM-DD" — month and day only, no year.
+  birthday: AppMetafieldValue | null;
+  // Set by the birthday cron; the code expires, so both are read together.
+  birthdayGiftCode: AppMetafieldValue | null;
+  birthdayGiftExpires: AppMetafieldValue | null;
 }
 
 export async function fetchCustomer(accessToken: string) {

@@ -20,6 +20,7 @@ import { Spacing, BorderRadius, Shadow } from '../../src/theme/spacing';
 import { LoyaltyGauge } from '../../src/components/ui/LoyaltyGauge';
 import { RewardTile } from '../../src/components/ui/RewardTile';
 import { MembershipUpsell } from '../../src/components/ui/MembershipUpsell';
+import { BirthdayCard } from '../../src/components/ui/BirthdayCard';
 import { useAuthStore } from '../../src/store/authStore';
 import { useCartStore } from '../../src/store/cartStore';
 import type { Cart } from '../../src/api/shopify-storefront';
@@ -269,6 +270,17 @@ export default function RewardsScreen() {
             />
           ))}
         </View>
+
+        {/* ── Birthday (Platinum perk) ───────────────────────── */}
+        {resolveMembership(membershipTier).tier === 'platinum' && (
+          <BirthdayCard
+            accessToken={accessToken}
+            birthday={customer?.birthday?.value}
+            giftCode={customer?.birthdayGiftCode?.value}
+            giftExpires={customer?.birthdayGiftExpires?.value}
+            onSaved={fetchProfile}
+          />
+        )}
 
         {/* ── Membership upgrade / manage ────────────────────── */}
         <MembershipUpsell membershipTier={membershipTier} onReturn={fetchProfile} />
