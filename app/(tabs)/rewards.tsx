@@ -10,7 +10,6 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as Sentry from '@sentry/react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -399,14 +398,6 @@ export default function RewardsScreen() {
             ) : (
               <Text style={styles.deleteAccountText}>Delete Account</Text>
             )}
-          </Pressable>
-
-          {/* TEMP — remove after confirming events land in Sentry */}
-          <Pressable
-            style={styles.deleteAccountBtn}
-            onPress={() => Sentry.captureException(new Error('Sentry test event from PetezPopz'))}
-          >
-            <Text style={styles.deleteAccountText}>🐛 Send Sentry Test Event</Text>
           </Pressable>
 
           <View style={{ height: 100 }} />
