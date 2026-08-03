@@ -11,7 +11,7 @@ import {
   refreshAccessToken,
   saveTokens,
 } from '../api/shopify-customer';
-import { fetchCustomer, CustomerProfile, getLoyaltyTier, LoyaltyTier } from '../api/queries/customer';
+import { fetchCustomer, CustomerProfile } from '../api/queries/customer';
 
 interface AuthState {
   isAuthenticated: boolean;
@@ -20,7 +20,6 @@ interface AuthState {
   refreshToken: string | null;
   customer: CustomerProfile | null;
   loyaltyPoints: number;
-  loyaltyTier: LoyaltyTier;
   // Lifetime order spend — VIP status is based on this, NOT loyaltyPoints,
   // so redeeming points for a discount never costs someone VIP status.
   lifetimeSpend: number;
@@ -36,14 +35,6 @@ interface AuthState {
   deleteAccount: () => Promise<void>;
 }
 
-const DEFAULT_TIER: LoyaltyTier = {
-  name: 'Common',
-  minPoints: 0,
-  maxPoints: 299,
-  color: '#9CA3AF',
-  emoji: '⚪',
-};
-
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
@@ -53,7 +44,6 @@ export const useAuthStore = create<AuthState>()(
       refreshToken: null,
       customer: null,
       loyaltyPoints: 0,
-      loyaltyTier: DEFAULT_TIER,
       lifetimeSpend: 0,
       membershipTier: 'silver',
 
@@ -115,7 +105,6 @@ export const useAuthStore = create<AuthState>()(
           const customer = result.data.customer;
           // customer.loyaltyPoints is a GraphQL alias for the custom.loyalty_points metafield
           const rawPoints = Number(customer.loyaltyPoints?.value ?? 0);
-          const tier = getLoyaltyTier(rawPoints);
           // Kept for display only — perks are driven by membershipTier now.
           const spend = Number(customer.lifetimeSpend?.value ?? 0);
           // Written by the membership service on subscription billing/cancel.
@@ -124,7 +113,6 @@ export const useAuthStore = create<AuthState>()(
           set({
             customer,
             loyaltyPoints: rawPoints,
-            loyaltyTier: tier,
             lifetimeSpend: spend,
             membershipTier: membership,
           });
@@ -142,8 +130,7 @@ export const useAuthStore = create<AuthState>()(
           refreshToken: null,
           customer: null,
           loyaltyPoints: 0,
-          loyaltyTier: DEFAULT_TIER,
-          lifetimeSpend: 0,
+              lifetimeSpend: 0,
           membershipTier: 'silver',
         });
       },
@@ -159,8 +146,7 @@ export const useAuthStore = create<AuthState>()(
           refreshToken: null,
           customer: null,
           loyaltyPoints: 0,
-          loyaltyTier: DEFAULT_TIER,
-          lifetimeSpend: 0,
+              lifetimeSpend: 0,
           membershipTier: 'silver',
         });
       },
@@ -176,7 +162,6 @@ export const useAuthStore = create<AuthState>()(
         // what produces "looks signed in but sign in/out don't work."
         customer: state.customer,
         loyaltyPoints: state.loyaltyPoints,
-        loyaltyTier: state.loyaltyTier,
         lifetimeSpend: state.lifetimeSpend,
         membershipTier: state.membershipTier,
       }),

@@ -27,7 +27,6 @@ import {
   fetchCustomerOrders,
   CustomerOrder,
   REDEMPTION_TIERS,
-  getProgressToNextTier,
   calculatePointsForPurchase,
   isMember,
   isEnrolled,
@@ -61,7 +60,7 @@ const NO_DISCOUNT_CODES: NonNullable<Cart['discountCodes']> = [];
 
 export default function RewardsScreen() {
   const router = useRouter();
-  const { isAuthenticated, accessToken, customer, loyaltyPoints, loyaltyTier, membershipTier, fetchProfile } = useAuthStore();
+  const { isAuthenticated, accessToken, customer, loyaltyPoints, membershipTier, fetchProfile } = useAuthStore();
   const applyCode = useCartStore((s) => s.applyCode);
   const appliedCodes = useCartStore((s) => s.cart?.discountCodes ?? NO_DISCOUNT_CODES);
 
@@ -170,7 +169,6 @@ export default function RewardsScreen() {
     );
   }
 
-  const { current, next, pointsNeeded } = getProgressToNextTier(loyaltyPoints);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -181,9 +179,10 @@ export default function RewardsScreen() {
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.headerLabel}>COLLECTOR STATUS</Text>
+            <Text style={styles.headerLabel}>MEMBERSHIP</Text>
             <Text style={styles.headerTitle}>
-              {loyaltyTier.emoji} {loyaltyTier.name} Tier
+              {resolveMembership(membershipTier).emoji}{' '}
+              {resolveMembership(membershipTier).label}
             </Text>
           </View>
           <View style={styles.pointsChip}>

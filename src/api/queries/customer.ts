@@ -235,52 +235,41 @@ export function applyMemberDiscount(price: number, tier?: string | null): number
   return price * (1 - resolveMembership(tier).discountRate);
 }
 
-export interface LoyaltyTier {
-  name: 'Common' | 'Exclusive' | 'Chase' | 'Vaulted';
-  minPoints: number;
-  maxPoints: number;
-  color: string;
-  emoji: string;
-}
+// ── Points progress ───────────────────────────────────────────────────────────
+//
+// The old Common/Exclusive/Chase/Vaulted point ladder was retired on
+// 2026-08-03. It ran alongside the membership tiers and meant a customer could
+// be "Chase tier, Platinum member" — two ladders, neither explaining the other,
+// with "Chase" also meaning a Funko chase variant.
+//
+// Membership is the status now. Points are simply the currency you redeem for
+// coupons, so progress is measured toward the next redemption rather than
+// toward a tier that conferred nothing.
 
-export const LOYALTY_TIERS: LoyaltyTier[] = [
-  { name: 'Common',    minPoints: 0,    maxPoints: 299,      color: '#9CA3AF', emoji: '⚪' },
-  { name: 'Exclusive', minPoints: 300,  maxPoints: 699,      color: '#60A5FA', emoji: '🔵' },
-  { name: 'Chase',     minPoints: 700,  maxPoints: 1499,     color: '#A78BFA', emoji: '💜' },
-  { name: 'Vaulted',   minPoints: 1500, maxPoints: Infinity, color: '#FFD700', emoji: '🏆' },
-];
-
-export function getLoyaltyTier(points: number): LoyaltyTier {
-  return (
-    LOYALTY_TIERS.slice()
-      .reverse()
-      .find((t) => points >= t.minPoints) ?? LOYALTY_TIERS[0]
-  );
-}
-
-export function getNextTier(points: number): LoyaltyTier | null {
-  return LOYALTY_TIERS.find((t) => t.minPoints > points) ?? null;
-}
-
-export function getProgressToNextTier(points: number): {
-  current: LoyaltyTier;
-  next: LoyaltyTier | null;
+export interface RedemptionProgress {
+  /** The next reward they can work toward, or null once every tier is affordable. */
+  next: { points: number; discountUSD: number } | null;
+  /** 0–1 against the largest redemption, for the progress bar. */
   progress: number;
+  /** Points still needed for `next`; 0 when maxed. */
   pointsNeeded: number;
-} {
-  const current = getLoyaltyTier(points);
-  const next = getNextTier(points);
-  // Progress is measured against the top tier's threshold (not the current
-  // tier's own range) to match how LoyaltyGauge draws its tier markers —
-  // both need to share the same 0-to-max-tier scale for the bar and the
-  // markers to actually line up.
-  const maxTierThreshold = LOYALTY_TIERS[LOYALTY_TIERS.length - 1].minPoints;
-  if (!next) return { current, next: null, progress: 1, pointsNeeded: 0 };
+  /** True when the balance covers the largest reward. */
+  maxed: boolean;
+}
+
+export function getRedemptionProgress(points: number): RedemptionProgress {
+  const top = REDEMPTION_TIERS[REDEMPTION_TIERS.length - 1];
+  const next = REDEMPTION_TIERS.find((t) => points < t.points) ?? null;
+
+  if (!next) {
+    return { next: null, progress: 1, pointsNeeded: 0, maxed: true };
+  }
   return {
-    current,
-    next,
-    progress: Math.min(points / maxTierThreshold, 1),
-    pointsNeeded: next.minPoints - points,
+    next: { points: next.points, discountUSD: next.discountUSD },
+    // Scaled against the top tier so the bar and its markers share one axis.
+    progress: Math.min(points / top.points, 1),
+    pointsNeeded: next.points - points,
+    maxed: false,
   };
 }
 

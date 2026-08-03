@@ -1,30 +1,30 @@
 // PetezPopz — LoyaltyGauge Component
-// Animated progress ring with tier markers and glow effects
+//
+// Progress toward the next reward redemption. Previously this tracked the
+// Common/Exclusive/Chase/Vaulted point ladder, which was retired on
+// 2026-08-03 — membership is the status now, and points are just the currency
+// you spend on coupons. Markers sit at the redemption thresholds, so the bar
+// answers the only question the number actually raises: what can I claim next?
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
-  withSpring,
   Easing,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '../../theme/colors';
 import { FontFamily, FontSize } from '../../theme/typography';
 import { Spacing, BorderRadius } from '../../theme/spacing';
-import {
-  getProgressToNextTier,
-  getLoyaltyTier,
-  LOYALTY_TIERS,
-} from '../../api/queries/customer';
+import { getRedemptionProgress, REDEMPTION_TIERS } from '../../api/queries/customer';
 
 interface Props {
   points: number;
 }
 
 export function LoyaltyGauge({ points }: Props) {
-  const { current, next, progress, pointsNeeded } = getProgressToNextTier(points);
+  const { next, progress, pointsNeeded, maxed } = getRedemptionProgress(points);
   const animatedWidth = useSharedValue(0);
 
   useEffect(() => {
@@ -38,78 +38,64 @@ export function LoyaltyGauge({ points }: Props) {
     width: `${animatedWidth.value * 100}%`,
   }));
 
+  const topPoints = REDEMPTION_TIERS[REDEMPTION_TIERS.length - 1].points;
+
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.tierEmoji}>{current.emoji}</Text>
-          <Text style={[styles.tierName, { color: current.color }]}>{current.name} Collector</Text>
-        </View>
-        <View style={styles.pointsBox}>
           <Text style={styles.pointsValue}>{points.toLocaleString()}</Text>
-          <Text style={styles.pointsLabel}>Points</Text>
+          <Text style={styles.pointsLabel}>POINTS</Text>
+        </View>
+        <View style={styles.nextBox}>
+          {maxed ? (
+            <Text style={styles.nextText}>All rewards unlocked 🎉</Text>
+          ) : (
+            <Text style={styles.nextText}>
+              <Text style={styles.nextStrong}>{pointsNeeded}</Text> more to $
+              {next?.discountUSD} off
+            </Text>
+          )}
         </View>
       </View>
 
-      {/* Progress Bar */}
-      <View style={styles.barTrack}>
-        <Animated.View style={[styles.barFill, barStyle]}>
+      <View style={styles.track}>
+        <Animated.View style={[styles.fill, barStyle]}>
           <LinearGradient
-            colors={[current.color, next?.color ?? current.color]}
+            colors={[Colors.brand.violet, Colors.brand.rose]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={StyleSheet.absoluteFill}
           />
         </Animated.View>
 
-        {/* Tier markers */}
-        {LOYALTY_TIERS.slice(1).map((tier) => {
-          const markerPos = tier.minPoints / (LOYALTY_TIERS[LOYALTY_TIERS.length - 1].minPoints);
-          return (
-            <View
-              key={tier.name}
-              style={[styles.tierMarker, { left: `${Math.min(markerPos * 100, 95)}%` }]}
-            />
-          );
-        })}
+        {/* Markers at each redemption threshold. The last sits at 100%, so it's
+            skipped — it would render half off the end of the track. */}
+        {REDEMPTION_TIERS.slice(0, -1).map((tier) => (
+          <View
+            key={tier.points}
+            style={[styles.marker, { left: `${(tier.points / topPoints) * 100}%` }]}
+          />
+        ))}
       </View>
 
-      {/* Footer */}
-      {next ? (
-        <Text style={styles.progressText}>
-          <Text style={{ color: next.color }}>{pointsNeeded} more points</Text>
-          {' to reach '}
-          <Text style={{ color: next.color, fontFamily: FontFamily.interSemiBold }}>
-            {next.emoji} {next.name}
-          </Text>
-        </Text>
-      ) : (
-        <Text style={[styles.progressText, { color: Colors.tier.vaulted }]}>
-          🏆 Maximum Tier Reached — You're a Legend!
-        </Text>
-      )}
-
-      {/* Tier icons row */}
-      <View style={styles.tiersRow}>
-        {LOYALTY_TIERS.map((tier) => (
-          <View key={tier.name} style={styles.tierBadge}>
-            <View
-              style={[
-                styles.tierDot,
-                {
-                  backgroundColor: points >= tier.minPoints ? tier.color : Colors.bg.elevated,
-                  borderColor: tier.color,
-                },
-              ]}
-            >
-              <Text style={styles.tierDotText}>{tier.emoji}</Text>
+      <View style={styles.legend}>
+        {REDEMPTION_TIERS.map((tier) => {
+          const unlocked = points >= tier.points;
+          return (
+            <View key={tier.points} style={styles.legendItem}>
+              <Text style={[styles.legendIcon, !unlocked && styles.legendDim]}>
+                {unlocked ? '✅' : '🔒'}
+              </Text>
+              <Text style={[styles.legendValue, !unlocked && styles.legendDim]}>
+                ${tier.discountUSD}
+              </Text>
+              <Text style={[styles.legendCost, !unlocked && styles.legendDim]}>
+                {tier.points} pts
+              </Text>
             </View>
-            <Text style={[styles.tierBadgeLabel, { color: points >= tier.minPoints ? tier.color : Colors.text.muted }]}>
-              {tier.name}
-            </Text>
-          </View>
-        ))}
+          );
+        })}
       </View>
     </View>
   );
@@ -117,94 +103,77 @@ export function LoyaltyGauge({ points }: Props) {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: Colors.bg.card,
-    borderRadius: BorderRadius.xl,
-    padding: Spacing[5],
-    borderWidth: 1,
-    borderColor: Colors.border.accent,
     marginHorizontal: Spacing[4],
+    padding: Spacing[5],
+    borderRadius: BorderRadius.xl,
+    backgroundColor: Colors.bg.card,
+    borderWidth: 1,
+    borderColor: Colors.border.default,
   },
   header: {
     flexDirection: 'row',
+    alignItems: 'flex-end',
     justifyContent: 'space-between',
-    alignItems: 'center',
     marginBottom: Spacing[4],
   },
-  tierEmoji: {
-    fontSize: 28,
-  },
-  tierName: {
-    fontFamily: FontFamily.outfitBold,
-    fontSize: FontSize.lg,
-    marginTop: 2,
-  },
-  pointsBox: {
-    alignItems: 'flex-end',
-    backgroundColor: Colors.bg.elevated,
-    paddingHorizontal: Spacing[4],
-    paddingVertical: Spacing[2],
-    borderRadius: BorderRadius.lg,
-  },
   pointsValue: {
-    fontFamily: FontFamily.outfitBlack,
-    fontSize: FontSize['2xl'],
-    color: Colors.tier.vaulted,
+    fontFamily: FontFamily.outfitBold,
+    fontSize: 34,
+    color: Colors.brand.violet,
+    lineHeight: 38,
   },
   pointsLabel: {
-    fontFamily: FontFamily.interMedium,
-    fontSize: FontSize.xs,
-    color: Colors.text.secondary,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
+    fontFamily: FontFamily.interBold,
+    fontSize: 10,
+    color: Colors.text.muted,
+    letterSpacing: 2,
   },
-  barTrack: {
-    height: 12,
-    backgroundColor: Colors.bg.elevated,
+  nextBox: { alignItems: 'flex-end', flexShrink: 1 },
+  nextText: {
+    fontFamily: FontFamily.interRegular,
+    fontSize: FontSize.sm,
+    color: Colors.text.secondary,
+    textAlign: 'right',
+  },
+  nextStrong: {
+    fontFamily: FontFamily.outfitBold,
+    color: Colors.tier.vaulted,
+  },
+  track: {
+    height: 10,
     borderRadius: BorderRadius.full,
+    backgroundColor: Colors.bg.elevated,
     overflow: 'hidden',
-    marginBottom: Spacing[2],
     position: 'relative',
   },
-  barFill: {
+  fill: {
     height: '100%',
     borderRadius: BorderRadius.full,
     overflow: 'hidden',
   },
-  tierMarker: {
+  marker: {
     position: 'absolute',
     top: 0,
     bottom: 0,
     width: 2,
-    backgroundColor: Colors.bg.primary,
+    backgroundColor: Colors.bg.card,
   },
-  progressText: {
-    fontFamily: FontFamily.interRegular,
-    fontSize: FontSize.sm,
-    color: Colors.text.secondary,
-    marginBottom: Spacing[4],
-  },
-  tiersRow: {
+  legend: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: Spacing[2],
+    justifyContent: 'space-between',
+    marginTop: Spacing[4],
   },
-  tierBadge: {
-    alignItems: 'center',
-    gap: 4,
+  legendItem: { alignItems: 'center', gap: 2 },
+  legendIcon: { fontSize: 13 },
+  legendValue: {
+    fontFamily: FontFamily.outfitBold,
+    fontSize: FontSize.sm,
+    color: Colors.text.primary,
   },
-  tierDot: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
+  legendCost: {
+    fontFamily: FontFamily.interRegular,
+    fontSize: 10,
+    color: Colors.text.muted,
   },
-  tierDotText: {
-    fontSize: 18,
-  },
-  tierBadgeLabel: {
-    fontFamily: FontFamily.interMedium,
-    fontSize: FontSize.xs,
-  },
+  legendDim: { opacity: 0.45 },
 });
