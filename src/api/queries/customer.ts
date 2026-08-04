@@ -321,8 +321,13 @@ export function calculatePointsForPurchase(totalAmountUSD: number): number {
   return Math.round(totalAmountUSD * LOYALTY_EARN_RATE);
 }
 
+// No `code` field. These were REWARDS100/200/400 — shared static codes that
+// worked for anyone with zero points. Redemption now mints a unique single-use
+// code per customer server-side, so nothing here should name a code.
+// Values must stay in step with TIERS in barcode-proxy/lib/redeem.js, which is
+// what actually enforces them.
 export const REDEMPTION_TIERS = [
-  { points: 100,  discountUSD: 5,  label: '100 Points = $5 Off',  code: 'REWARDS100' },
-  { points: 200,  discountUSD: 10, label: '200 Points = $10 Off', code: 'REWARDS200' },
-  { points: 400,  discountUSD: 20, label: '400 Points = $20 Off', code: 'REWARDS400' },
+  { points: 100, discountUSD: 5,  label: '100 Points = $5 Off' },
+  { points: 200, discountUSD: 10, label: '200 Points = $10 Off' },
+  { points: 400, discountUSD: 20, label: '400 Points = $20 Off' },
 ] as const;

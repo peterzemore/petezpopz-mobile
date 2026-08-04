@@ -37,6 +37,7 @@ const PERKS: Record<'gold' | 'platinum', string[]> = {
     'Free shipping over $79',
     '2 protectors a month, plus an acrylic every 3 months',
     'Early access to every drop',
+    '$20 birthday gift every year',
   ],
 };
 

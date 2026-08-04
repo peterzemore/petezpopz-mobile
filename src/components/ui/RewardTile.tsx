@@ -1,6 +1,6 @@
 // PetezPopz — RewardTile Component
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   useSharedValue,
@@ -17,7 +17,6 @@ export interface RedemptionTier {
   points: number;
   discountUSD: number;
   label: string;
-  code: string;
 }
 
 interface Props {
@@ -43,10 +42,13 @@ export function RewardTile({ tier, userPoints, redeemed, onRedeem }: Props) {
     scale.value = withSequence(withSpring(0.95), withSpring(1.02), withSpring(1));
     setLoading(true);
     try {
+      // Deliberately silent. Codes are minted server-side per redemption, so
+      // this component can't know the real one — it used to announce
+      // tier.code, a leftover static REWARDS* value that no longer exists,
+      // showing the customer a second popup quoting a dead code. The caller
+      // reports the real outcome, including the code and the new balance,
+      // and reports failures too.
       await onRedeem(tier);
-      Alert.alert('🎉 Reward Unlocked!', `Your code ${tier.code} has been applied to your cart.`);
-    } catch {
-      Alert.alert('Error', 'Could not apply reward. Please try again.');
     } finally {
       setLoading(false);
     }

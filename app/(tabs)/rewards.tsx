@@ -253,7 +253,7 @@ export default function RewardsScreen() {
           </Text>
           {REDEMPTION_TIERS.map((tier) => (
             <RewardTile
-              key={tier.code}
+              key={tier.points}
               tier={tier}
               userPoints={loyaltyPoints}
               // A redeemed tier is one whose freshly minted code is sitting in
