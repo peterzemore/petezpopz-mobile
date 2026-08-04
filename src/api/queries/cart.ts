@@ -51,7 +51,22 @@ export const CART_CREATE = `
   }
 `;
 
-export async function createCart(lines: Array<{ merchandiseId: string; quantity: number }> = []) {
+/**
+ * Cart line, optionally on a subscription selling plan.
+ *
+ * sellingPlanId matters for the memberships: they're subscription-only, and a
+ * line without a plan is rejected at checkout with "Variant can only be
+ * purchased with a selling plan". Cart permalinks (/cart/<variant>:1) can't
+ * carry one at all — they return 410 for these products — so the plan has to
+ * be attached here, when the cart is built.
+ */
+export interface CartLineInput {
+  merchandiseId: string;
+  quantity: number;
+  sellingPlanId?: string;
+}
+
+export async function createCart(lines: CartLineInput[] = []) {
   return storefrontFetch<{
     cartCreate: { cart: Cart; userErrors: Array<{ field: string; message: string }> };
   }>(CART_CREATE, { input: { lines } });

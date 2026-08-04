@@ -234,22 +234,33 @@ export const STANDARD_FREE_SHIPPING_OVER = 99;
 const STORE_URL = process.env.EXPO_PUBLIC_STORE_WEB_URL ?? 'https://petezpopz.com';
 const SELLING_PLAN = process.env.EXPO_PUBLIC_MEMBERSHIP_SELLING_PLAN ?? '972193856';
 
-// Cart permalinks, not product URLs.
+// Membership variants and their selling plan.
 //
-// /products/x?selling_plan=y only preselects the plan on the product page —
-// the theme still has to carry it into the add-to-cart, and this theme has no
-// selling-plan support at all. The item reached checkout without a plan and
-// Shopify rejected it: "Variant can only be purchased with a selling plan."
+// Two approaches were tried and both failed, which is worth recording:
 //
-// A cart permalink attaches the variant AND the plan in one step, so it can't
-// be dropped by a product form that doesn't know about subscriptions.
-const GOLD_VARIANT = process.env.EXPO_PUBLIC_GOLD_VARIANT_ID ?? '41324862210112';
-const PLATINUM_VARIANT = process.env.EXPO_PUBLIC_PLATINUM_VARIANT_ID ?? '41324862603328';
+//   /products/x?selling_plan=y  only preselects the plan on the product page.
+//   The theme still has to carry it into the add-to-cart, and this theme has
+//   no selling-plan support, so checkout rejected the line with "Variant can
+//   only be purchased with a selling plan".
+//
+//   /cart/<variant>:1?selling_plan=y  returns 410. Cart permalinks can't carry
+//   a selling plan, so a subscription-only product can't be added that way at
+//   all — with or without the parameter.
+//
+// So the cart is built through the Storefront API with sellingPlanId on the
+// line, and the customer is sent to that cart's checkoutUrl.
+export const GOLD_VARIANT_ID =
+  process.env.EXPO_PUBLIC_GOLD_VARIANT_ID ?? '41324862210112';
+export const PLATINUM_VARIANT_ID =
+  process.env.EXPO_PUBLIC_PLATINUM_VARIANT_ID ?? '41324862603328';
+export const MEMBERSHIP_SELLING_PLAN_ID = SELLING_PLAN;
 
-export const MEMBERSHIP_CHECKOUT_URL: Record<'gold' | 'platinum', string> = {
-  gold: `${STORE_URL}/cart/${GOLD_VARIANT}:1?selling_plan=${SELLING_PLAN}`,
-  platinum: `${STORE_URL}/cart/${PLATINUM_VARIANT}:1?selling_plan=${SELLING_PLAN}`,
+export const MEMBERSHIP_VARIANT: Record<'gold' | 'platinum', string> = {
+  gold: `gid://shopify/ProductVariant/${GOLD_VARIANT_ID}`,
+  platinum: `gid://shopify/ProductVariant/${PLATINUM_VARIANT_ID}`,
 };
+
+export const MEMBERSHIP_SELLING_PLAN_GID = `gid://shopify/SellingPlan/${SELLING_PLAN}`;
 
 // Shopify's customer account area, where subscriptions, payment methods and
 // cancellation live. /account on the store just redirects here, so this points

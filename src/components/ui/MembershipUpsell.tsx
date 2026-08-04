@@ -10,7 +10,7 @@
 // Renders nothing for customers already on a paid tier — they get a manage
 // link instead, since subscription changes live in Shopify's account area.
 import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, Alert } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '../../theme/colors';
@@ -18,11 +18,13 @@ import { FontFamily, FontSize } from '../../theme/typography';
 import { Spacing, BorderRadius } from '../../theme/spacing';
 import {
   MEMBERSHIPS,
-  MEMBERSHIP_CHECKOUT_URL,
+  MEMBERSHIP_VARIANT,
+  MEMBERSHIP_SELLING_PLAN_GID,
   MEMBERSHIP_PRICE,
   MANAGE_MEMBERSHIP_URL,
   resolveMembership,
 } from '../../api/queries/customer';
+import { createCart } from '../../api/queries/cart';
 
 interface Props {
   membershipTier: string;
@@ -55,6 +57,45 @@ export function MembershipUpsell({ membershipTier, onReturn }: Props) {
         // webhook, so there's nothing to read immediately — but refetching on
         // return means the screen updates without the customer relaunching.
         onReturn?.();
+      } finally {
+        setOpening(null);
+      }
+    },
+    [opening, onReturn],
+  );
+
+  /**
+   * Build a cart containing just the membership, on its selling plan, and open
+   * that cart's checkout.
+   *
+   * A fresh cart rather than the shopper's own: a subscription checked out
+   * alongside a basket of pops is confusing, and Shopify treats a mixed cart
+   * differently. This keeps the subscription purchase self-contained.
+   */
+  const join = useCallback(
+    async (key: 'gold' | 'platinum') => {
+      if (opening) return;
+      setOpening(key);
+      try {
+        const res = await createCart([
+          {
+            merchandiseId: MEMBERSHIP_VARIANT[key],
+            quantity: 1,
+            sellingPlanId: MEMBERSHIP_SELLING_PLAN_GID,
+          },
+        ]);
+        const errs = res.data.cartCreate.userErrors ?? [];
+        const url = res.data.cartCreate.cart?.checkoutUrl;
+        if (errs.length || !url) {
+          throw new Error(errs[0]?.message || 'Could not start checkout');
+        }
+        await WebBrowser.openBrowserAsync(url);
+        onReturn?.();
+      } catch (err) {
+        Alert.alert(
+          'Could not start checkout',
+          err instanceof Error ? err.message : 'Please try again.',
+        );
       } finally {
         setOpening(null);
       }
@@ -112,7 +153,7 @@ export function MembershipUpsell({ membershipTier, onReturn }: Props) {
 
             <Pressable
               style={[styles.cta, busy && styles.ctaBusy]}
-              onPress={() => open(MEMBERSHIP_CHECKOUT_URL[key], key)}
+              onPress={() => join(key)}
               disabled={!!opening}
             >
               <LinearGradient
