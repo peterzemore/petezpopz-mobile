@@ -234,9 +234,21 @@ export const STANDARD_FREE_SHIPPING_OVER = 99;
 const STORE_URL = process.env.EXPO_PUBLIC_STORE_WEB_URL ?? 'https://petezpopz.com';
 const SELLING_PLAN = process.env.EXPO_PUBLIC_MEMBERSHIP_SELLING_PLAN ?? '972193856';
 
+// Cart permalinks, not product URLs.
+//
+// /products/x?selling_plan=y only preselects the plan on the product page —
+// the theme still has to carry it into the add-to-cart, and this theme has no
+// selling-plan support at all. The item reached checkout without a plan and
+// Shopify rejected it: "Variant can only be purchased with a selling plan."
+//
+// A cart permalink attaches the variant AND the plan in one step, so it can't
+// be dropped by a product form that doesn't know about subscriptions.
+const GOLD_VARIANT = process.env.EXPO_PUBLIC_GOLD_VARIANT_ID ?? '41324862210112';
+const PLATINUM_VARIANT = process.env.EXPO_PUBLIC_PLATINUM_VARIANT_ID ?? '41324862603328';
+
 export const MEMBERSHIP_CHECKOUT_URL: Record<'gold' | 'platinum', string> = {
-  gold: `${STORE_URL}/products/gold-membership?selling_plan=${SELLING_PLAN}`,
-  platinum: `${STORE_URL}/products/platinum-membership?selling_plan=${SELLING_PLAN}`,
+  gold: `${STORE_URL}/cart/${GOLD_VARIANT}:1?selling_plan=${SELLING_PLAN}`,
+  platinum: `${STORE_URL}/cart/${PLATINUM_VARIANT}:1?selling_plan=${SELLING_PLAN}`,
 };
 
 // Shopify's customer account area, where subscriptions, payment methods and
