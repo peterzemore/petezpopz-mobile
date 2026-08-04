@@ -16,11 +16,12 @@
 // Configure in the Dev Dashboard: App proxy → subpath prefix "apps",
 // subpath "rewards", URL https://barcode-proxy-sigma.vercel.app/api/app-proxy
 //
-//   GET  /apps/rewards            → balance and redemption tiers
-//   POST /apps/rewards?points=100 → redeem, returns a code
+//   GET  /apps/rewards                     → balance and redemption tiers
+//   POST /apps/rewards?points=100          → redeem, returns a code
+//   POST /apps/rewards?cancel=<code>       → destroy the code, return the points
 
 import crypto from 'node:crypto';
-import { redeemPoints, getPointsBalance, TIERS, RedeemError } from '../lib/redeem.js';
+import { redeemPoints, cancelRedemption, getPointsBalance, listCustomerCodes, TIERS, RedeemError } from '../lib/redeem.js';
 
 /**
  * Verify Shopify's App Proxy signature.
@@ -72,9 +73,13 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
-      const balance = await getPointsBalance(customerId);
+      const [balance, codes] = await Promise.all([
+        getPointsBalance(customerId),
+        listCustomerCodes(customerId),
+      ]);
       return res.status(200).json({
         balance,
+        codes,
         tiers: Object.entries(TIERS).map(([points, discountUSD]) => ({
           points: Number(points),
           discountUSD,
@@ -84,6 +89,15 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST') {
+      // Cancelling deletes the code as well as returning the points — see
+      // cancelRedemption. Refunding without deleting would let someone redeem,
+      // cancel, and keep a live code.
+      const cancel = req.query?.cancel ?? req.body?.cancel;
+      if (cancel) {
+        const result = await cancelRedemption(customerId, cancel);
+        return res.status(200).json({ ok: true, ...result });
+      }
+
       const points = Number(req.query?.points ?? req.body?.points);
       const result = await redeemPoints(customerId, points);
       return res.status(200).json({ ok: true, ...result });

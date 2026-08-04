@@ -183,3 +183,154 @@ export async function getPointsBalance(customerId) {
   const json = await adminGraphQL(GET_POINTS_QUERY, { id: customerId });
   return Number(json?.customer?.metafield?.value ?? 0);
 }
+
+// ── Cancelling a redemption ──────────────────────────────────────────────────
+
+// No server-side search filter anywhere in this file.
+//
+// codeDiscountNodes' `query:` argument does not match these records — neither
+// `code:12345` nor `title:'Loyalty redemption'` returns anything, because the
+// titles contain an em dash and parentheses. It fails silently by returning an
+// empty list, which reads as "that code doesn't exist" rather than "the query
+// is wrong" — it cost a customer-facing bug once already. Scan and filter in
+// JS instead; the code volume here is small.
+const SCAN_CODES = `
+  query ScanCodes($cursor: String) {
+    codeDiscountNodes(first: 250, after: $cursor) {
+      pageInfo { hasNextPage endCursor }
+      nodes {
+        id
+        codeDiscount {
+          __typename
+          ... on DiscountCodeBasic {
+            title
+            status
+            asyncUsageCount
+            endsAt
+            codes(first: 5) { nodes { code } }
+          }
+        }
+      }
+    }
+  }
+`;
+
+const REDEMPTION_TITLE_RE =
+  /Loyalty redemption — (\d+) pts \((gid:\/\/shopify\/Customer\/\d+)\)/;
+
+/** Every loyalty code on the store, parsed. Shared by listing and cancelling. */
+async function scanRedemptionCodes() {
+  const out = [];
+  let cursor = null;
+  let hasNext = true;
+  let pages = 0;
+  while (hasNext && pages < 6) {
+    const page = (await adminGraphQL(SCAN_CODES, { cursor }))?.codeDiscountNodes;
+    pages += 1;
+    for (const n of page?.nodes ?? []) {
+      const d = n.codeDiscount ?? {};
+      const m = REDEMPTION_TITLE_RE.exec(d.title ?? '');
+      if (!m) continue;
+      out.push({
+        id: n.id,
+        code: d.codes?.nodes?.[0]?.code ?? null,
+        points: Number(m[1]),
+        ownerId: m[2],
+        used: (d.asyncUsageCount ?? 0) > 0,
+        endsAt: d.endsAt ? String(d.endsAt).slice(0, 10) : null,
+      });
+    }
+    hasNext = page?.pageInfo?.hasNextPage ?? false;
+    cursor = page?.pageInfo?.endCursor ?? null;
+  }
+  return out;
+}
+
+const DELETE_CODE = `
+  mutation DeleteCode($id: ID!) {
+    discountCodeDelete(id: $id) {
+      deletedCodeDiscountId
+      userErrors { field message }
+    }
+  }
+`;
+
+/**
+ * Cancels a reward code and credits the points back.
+ *
+ * Removing a code from the cart is NOT this. The code survives that and stays
+ * valid for 30 days, so refunding on cart-removal alone would let someone
+ * redeem, remove, get refunded, and repeat — accumulating live codes for free.
+ * A refund therefore has to delete the code, making it a real cancellation.
+ *
+ * Three things are checked before any points move:
+ *   - the code is one of ours (the title records which redemption it was)
+ *   - it belongs to this customer (the title records who)
+ *   - it has never been used (a spent code can't be handed back)
+ */
+export async function cancelRedemption(customerId, code) {
+  const clean = String(code ?? '').trim();
+  if (!clean) throw new RedeemError('No code provided', 400);
+
+  const all = await scanRedemptionCodes();
+  const match = all.find(
+    (c) => String(c.code ?? '').toLowerCase() === clean.toLowerCase(),
+  );
+  if (!match) throw new RedeemError('That code was not found', 404);
+
+  if (match.ownerId !== customerId) {
+    // Deliberately identical to "not found": confirming a code exists but
+    // belongs to someone else would let a caller probe for other people's.
+    throw new RedeemError('That code was not found', 404);
+  }
+
+  if (match.used) {
+    throw new RedeemError('That code has already been used on an order', 400);
+  }
+
+  // Delete first. If crediting then failed, the customer is short points but
+  // holds no live code — recoverable by hand. The reverse would hand out
+  // points while the code still worked.
+  const del = await adminGraphQL(DELETE_CODE, { id: match.id });
+  const delErrs = del?.discountCodeDelete?.userErrors ?? [];
+  if (delErrs.length) throw new RedeemError(delErrs[0].message, 500);
+
+  const balance = await getPointsBalance(customerId);
+  const newBalance = balance + match.points;
+
+  const set = await adminGraphQL(SET_POINTS_MUTATION, {
+    metafields: [
+      {
+        ownerId: customerId,
+        namespace: 'custom',
+        key: 'loyalty_points',
+        type: 'number_integer',
+        value: String(newBalance),
+      },
+    ],
+  });
+  const setErrs = set?.metafieldsSet?.userErrors ?? [];
+  if (setErrs.length) throw new RedeemError(setErrs[0].message, 500);
+
+  return { cancelled: clean, pointsReturned: match.points, newBalance };
+}
+
+/**
+ * A customer's unused reward codes.
+ *
+ * Needed because removing a code at Shopify's checkout doesn't cancel it —
+ * that happens on Shopify's side and fires no webhook we can act on. Without
+ * this list a customer who backed out has spent points, holds a code they
+ * can't see, and no way to convert it back.
+ */
+export async function listCustomerCodes(customerId) {
+  const all = await scanRedemptionCodes();
+  return all
+    .filter((c) => c.ownerId === customerId && !c.used)
+    .map((c) => ({
+      code: c.code,
+      points: c.points,
+      discountUSD: TIERS[c.points] ?? null,
+      expiresAt: c.endsAt,
+    }));
+}

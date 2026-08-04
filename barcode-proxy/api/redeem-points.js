@@ -10,7 +10,7 @@
 //   SHOPIFY_STORE, SHOPIFY_CLIENT_ID, SHOPIFY_CLIENT_SECRET,
 //   SHOPIFY_CUSTOMER_GRAPHQL_URL
 
-import { redeemPoints, RedeemError } from '../lib/redeem.js';
+import { redeemPoints, cancelRedemption, RedeemError } from '../lib/redeem.js';
 
 const WHOAMI_QUERY = `query { customer { id } }`;
 
@@ -44,6 +44,12 @@ export default async function handler(req, res) {
     const customerId = whoami?.data?.customer?.id;
     if (!customerId) {
       return res.status(401).json({ error: 'Invalid or expired access token' });
+    }
+
+    // The app can cancel too, so an unused code isn't stranded there either.
+    if (req.body?.cancel) {
+      const cancelled = await cancelRedemption(customerId, req.body.cancel);
+      return res.status(200).json(cancelled);
     }
 
     const result = await redeemPoints(customerId, Number(req.body?.points));
