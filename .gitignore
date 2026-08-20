@@ -17,3 +17,10 @@ expo-env.d.ts
 /ios
 /android
 .env.local
+
+# Separate, standalone git repo (created by `shopify app init`) for the
+# checkout UI extension — not part of this repo's history.
+checkout-rewards-extension/
+
+# Contains a Vercel/EAS automation token — never commit.
+APP automation token
