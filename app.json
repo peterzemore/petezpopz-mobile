@@ -26,7 +26,7 @@
     "ios": {
       "bundleIdentifier": "com.petezpopz.app",
       "supportsTablet": true,
-      "buildNumber": "6",
+      "buildNumber": "7",
       "infoPlist": {
         "NSCameraUsageDescription": "PetezPopz needs camera access to scan product barcodes.",
         "ITSAppUsesNonExemptEncryption": false
@@ -38,7 +38,7 @@
         "backgroundColor": "#0A0A12"
       },
       "package": "com.petezpopz.app",
-      "versionCode": 2,
+      "versionCode": 3,
       "permissions": [
         "CAMERA",
         "VIBRATE"
