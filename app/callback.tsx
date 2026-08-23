@@ -17,7 +17,7 @@ import { Colors } from '../src/theme/colors';
 import { FontFamily, FontSize } from '../src/theme/typography';
 import { Spacing, BorderRadius, Shadow } from '../src/theme/spacing';
 import { exchangeCodeForTokens, getAndClearPendingVerifier } from '../src/api/shopify-customer';
-import { useAuthStore } from '../src/store/authStore';
+import { useAuthStore, waitForAuthenticated } from '../src/store/authStore';
 
 export default function CallbackScreen() {
   const router = useRouter();
@@ -36,16 +36,29 @@ export default function CallbackScreen() {
       return;
     }
 
+    // getAndClearPendingVerifier() is a single-use claim: this same redirect can
+    // also be caught in-app by app/auth/login.tsx's WebBrowser auth-session
+    // listener (which usually wins, since it doesn't round-trip through routing).
+    // A null verifier here means that listener already claimed it — wait for it
+    // to finish signing in rather than treating the already-used code as failure.
     getAndClearPendingVerifier()
       .then((verifier) => {
-        if (!verifier) throw new Error('No stored PKCE verifier for this sign-in attempt');
-        return exchangeCodeForTokens(code, verifier);
+        if (!verifier) {
+          return waitForAuthenticated().then((ok) => {
+            if (ok) router.replace('/(tabs)');
+            else setFailed(true);
+          });
+        }
+        return exchangeCodeForTokens(code, verifier)
+          .then(({ accessToken, refreshToken, expiresIn }) => setTokens(accessToken, refreshToken, expiresIn))
+          .then(() => router.replace('/(tabs)'));
       })
-      .then(({ accessToken, refreshToken, expiresIn }) => setTokens(accessToken, refreshToken, expiresIn))
-      .then(() => router.replace('/(tabs)'))
       .catch((err) => {
         console.error('Callback token exchange failed:', err);
-        setFailed(true);
+        waitForAuthenticated().then((ok) => {
+          if (ok) router.replace('/(tabs)');
+          else setFailed(true);
+        });
       });
   }, [code, oauthError]);
 

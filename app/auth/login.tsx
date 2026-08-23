@@ -17,8 +17,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '../../src/theme/colors';
 import { FontFamily, FontSize } from '../../src/theme/typography';
 import { Spacing, BorderRadius, Shadow } from '../../src/theme/spacing';
-import { useShopifyAuth, exchangeCodeForTokens, savePendingVerifier } from '../../src/api/shopify-customer';
-import { useAuthStore } from '../../src/store/authStore';
+import { useShopifyAuth, exchangeCodeForTokens, savePendingVerifier, getAndClearPendingVerifier } from '../../src/api/shopify-customer';
+import { useAuthStore, waitForAuthenticated } from '../../src/store/authStore';
 
 // Shopify serves these on the store's primary domain; both required to be
 // reachable in-app for App Store / Play Store review.
@@ -44,27 +44,45 @@ export default function LoginScreen() {
   useEffect(() => {
     if (response?.type === 'success') {
       const { code } = response.params;
-      const verifier = request?.codeVerifier;
-      if (code && verifier) {
-        exchangeCodeForTokens(code, verifier)
-          .then(({ accessToken, refreshToken, expiresIn }) =>
-            setTokens(accessToken, refreshToken, expiresIn),
-          )
-          .then(() => {
-            // After a logout, this screen is reached via router.replace(), which
-            // leaves no history entry to go back to — calling back() in that case
-            // throws "GO_BACK was not handled by any navigator".
-            if (router.canGoBack()) {
-              router.back();
-            } else {
-              router.replace('/(tabs)');
-            }
-          })
-          .catch((err) => {
-            console.error('Token exchange failed:', err);
-            alert('Sign in failed. Please try again.');
+      if (!code) return;
+
+      const goToApp = () => {
+        // After a logout, this screen is reached via router.replace(), which
+        // leaves no history entry to go back to — calling back() in that case
+        // throws "GO_BACK was not handled by any navigator".
+        if (router.canGoBack()) {
+          router.back();
+        } else {
+          router.replace('/(tabs)');
+        }
+      };
+
+      // getAndClearPendingVerifier() is a single-use claim: on Android, the same
+      // redirect can also be caught by app/callback.tsx's fallback route (see its
+      // comment). If that route claimed the verifier first, a null verifier here
+      // means it already signed the user in — wait for that to land instead of
+      // re-exchanging the (now already-used) code and failing.
+      getAndClearPendingVerifier()
+        .then((verifier) => {
+          if (!verifier) {
+            return waitForAuthenticated().then((ok) => {
+              if (ok) goToApp();
+              else alert('Sign in failed. Please try again.');
+            });
+          }
+          return exchangeCodeForTokens(code, verifier)
+            .then(({ accessToken, refreshToken, expiresIn }) =>
+              setTokens(accessToken, refreshToken, expiresIn),
+            )
+            .then(goToApp);
+        })
+        .catch((err) => {
+          console.error('Token exchange failed:', err);
+          waitForAuthenticated().then((ok) => {
+            if (ok) goToApp();
+            else alert('Sign in failed. Please try again.');
           });
-      }
+        });
     }
   }, [response]);
 

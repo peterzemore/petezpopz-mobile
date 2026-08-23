@@ -35,6 +35,30 @@ interface AuthState {
   deleteAccount: () => Promise<void>;
 }
 
+// On Android, the OAuth redirect can be caught by two independent listeners
+// at once — expo-web-browser's in-app auth-session completion (app/auth/login.tsx)
+// and expo-router's normal deep-link routing to app/callback.tsx (added because
+// the former is unreliable in standalone Android builds). Both may try to
+// exchange the same single-use authorization code; whichever loses that race
+// gets an already-used-code error even though the other one is signing in
+// successfully. Losers call this instead of treating that as a real failure.
+export function waitForAuthenticated(timeoutMs = 8000): Promise<boolean> {
+  if (useAuthStore.getState().isAuthenticated) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      unsubscribe();
+      resolve(false);
+    }, timeoutMs);
+    const unsubscribe = useAuthStore.subscribe((state) => {
+      if (state.isAuthenticated) {
+        clearTimeout(timer);
+        unsubscribe();
+        resolve(true);
+      }
+    });
+  });
+}
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
