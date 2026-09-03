@@ -38,7 +38,7 @@
         "backgroundColor": "#0A0A12"
       },
       "package": "com.petezpopz.app",
-      "versionCode": 3,
+      "versionCode": 4,
       "permissions": [
         "CAMERA",
         "VIBRATE"
