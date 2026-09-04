@@ -1,6 +1,53 @@
 # PetezPopz — Custom Shopify Mobile App
 
-A production-grade React Native + Expo mobile app for **[PetezPopz](https://www.petezpopz.com)** — a Funko Pop and Loungefly retail store.
+[![Google Play](https://img.shields.io/badge/Google_Play-live-2C6E52)](https://play.google.com/store/apps/details?id=com.petezpopz.app)
+![Platform](https://img.shields.io/badge/platform-React_Native_%2B_Expo_52-1F5F8B)
+![Language](https://img.shields.io/badge/TypeScript-strict-1F5F8B)
+
+A React Native + Expo storefront app for **[PetezPopz](https://www.petezpopz.com)**, a Funko Pop and
+Loungefly retail store in Dayton, Ohio. **Live in Google Play production since August 2026**
+(`com.petezpopz.app`, versionCode 4), serving the store's real customers against its live Shopify catalog.
+
+Built and shipped solo — architecture, implementation, store listing, and release.
+
+---
+
+## What it does
+
+- **Browse and buy** the live Shopify catalog — collections, product pages with cross-merchandising,
+  cart, and native checkout via `@shopify/checkout-sheet-kit`
+- **Sign in as a real Shopify customer** through the Customer Account API using OAuth PKCE, with
+  biometric unlock on return visits
+- **Scan a barcode in-store** to look up a product against live inventory
+- **Wishlist ("Toybox") and a rewards hub** backed by customer metafields, kept in sync with the
+  store's membership tiers
+
+---
+
+## Engineering notes
+
+The parts worth a reviewer's attention:
+
+**Admin credentials never enter the app bundle.** A mobile binary is not a secret store — anything
+shipped in it is readable. The app holds only the *public* Storefront API token. The one flow that
+genuinely needs Admin scope (barcode lookup against inventory) goes through a separate server-side
+proxy in [`barcode-proxy/`](barcode-proxy/), deployed on Vercel, which reads `SHOPIFY_ADMIN_TOKEN`
+from its own environment. See [`.env.example`](.env.example) for the full split.
+
+**Shopify deprecated long-lived Admin tokens on 2026-01-01.** New apps use a client-credentials
+grant whose access token expires in 24 hours (`expires_in` is always `86399`), so it cannot be a
+static environment variable. The proxy fetches and caches it at runtime behind a refresh buffer —
+see [`barcode-proxy/lib/shopify-admin.js`](barcode-proxy/lib/shopify-admin.js).
+
+**Auth is PKCE, and tokens live in the keychain.** Customer Account API OAuth runs the PKCE flow
+rather than an implicit grant, and access/refresh tokens are stored via `expo-secure-store`
+(iOS Keychain / Android Keystore), not `AsyncStorage`.
+
+**Typed end to end.** Every Storefront and Customer Account query is a typed module under
+[`src/api/queries/`](src/api/queries/), so a schema change surfaces at compile time rather than
+as a runtime `undefined` in a customer's cart.
+
+---
 
 ## Tech Stack
 
