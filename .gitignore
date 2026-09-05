@@ -30,3 +30,4 @@ APP automation token
 *.aab
 *.apk
 Android_release_*/
+.claude/
