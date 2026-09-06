@@ -98,7 +98,10 @@ https://petezpopz.com/pages/delete-your-petezpopz-account.
   discounts) billed through Shopify checkout, not in-app purchase, per guideline 3.1.3(e)
   for goods consumed outside the app. Account deletion is in Rewards > Account."
 
-## Open decisions (Peter)
+## Status 2026-09-06
+Everything above was entered into App Store Connect (app record 6809233073). Decided: iPhone-only, US-only availability, Free, age 4+, content rights = yes with rights, review phone = Peter's cell. Screenshots actually used: `app-store-6.5in/` (ASC asked for the 6.5-inch slot, 1284x2778). Remaining: upload build 9 via `eas submit`, attach it, Add for Review.
+
+## Open decisions (Peter) — resolved, kept for history
 1. iPad: app.json has `ios.supportsTablet: true`, so ASC will require 13-inch iPad
    screenshots and reviewers will test on iPad. The UI is phone-designed. Recommend
    setting supportsTablet to false (iPhone-only) before the submitted build.
