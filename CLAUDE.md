@@ -96,6 +96,33 @@ Every category card in the app (Fandom Grid, `src/api/queries/collections.ts`) b
 - App Review notes state that sign-in is optional and passwordless (Shopify one-time email code), so there is no demo account; Gold/Platinum are physical-goods subscriptions billed via Shopify checkout (guideline 3.1.3(e)), not in-app purchase. Keep the app consistent with that or the next review will flag it.
 - `ios.buildNumber` auto-increments on every production build (`autoIncrement: true`, `appVersionSource: local`) and EAS edits `app.json` locally — commit that bump after each build so the repo matches what was uploaded.
 
+## Sign-out and customer identity (fixed in code 2026-09-07, ships in build 10)
+
+Two build-9 bugs, both found while recording the App Review video, both platform-neutral:
+
+- **Sign-out did not end Shopify's browser session.** `logoutFromShopify()` used to `fetch()` the
+  logout endpoint with the *client id* as `id_token_hint` and no cookies, so it did nothing; the
+  system browser sheet (Safari / Chrome custom tab) kept the session cookie and the next sign-in
+  silently resumed the previous account. Now the code exchange stores the OpenID `id_token`
+  (`KEYS.ID_TOKEN`) and sign-out opens the logout URL through `WebBrowser.openAuthSessionAsync`
+  with `id_token_hint` + `post_logout_redirect_uri` (the OAuth callback URI). **Shopify config
+  required before build 10:** in the store's Customer Account API app settings, add the OAuth
+  callback URI as a **Logout URI**, or Shopify rejects the redirect. Sessions signed in before
+  this change have no stored id_token and skip the browser logout (tokens still cleared).
+- **Checkout opened as whoever the checkout web view last remembered.** Shopify's checkout sheet
+  keeps its own cookie store inside the app; the kit exposes no cookie clearing. Mitigation in two
+  halves: while signed in, the customer's access token is attached to the cart as
+  `buyerIdentity.customerAccessToken` (on sign-in via `cartStore.setBuyer`, and on any cart
+  created while signed in), so checkout opens as the right customer; on sign-out / delete,
+  `forgetCustomerOnDevice()` drops the cart, creates a fresh one, and calls the kit's
+  `invalidate()`. Known residual: Shop Pay device recognition inside that web view can still
+  prefill an email for a *signed-out* user until the app is reinstalled. Only a native
+  `WKWebsiteDataStore` / `CookieManager` clear would remove it; not done.
+
+To reproduce the old symptoms for verification: sign in, sign out, tap Sign in again -- it must
+ask for an email. Then add to cart and open checkout -- the contact field must be empty (signed
+out) or the signed-in customer's email (signed in).
+
 ## Membership tiers (Silver / Gold / Platinum)
 
 Defined once in `petezpopz-membership/lib/tiers.js` (a separate repo, not here) — Silver is free, Gold is $14.99/mo (10% off), Platinum is $24.99/mo (12% off). This app reads the customer's tier from the `custom.membership_tier` metafield. Don't hardcode tier names or rates here without checking that file first — it's the contract all three PetezPopz repos share.

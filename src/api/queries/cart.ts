@@ -66,10 +66,36 @@ export interface CartLineInput {
   sellingPlanId?: string;
 }
 
-export async function createCart(lines: CartLineInput[] = []) {
+export async function createCart(
+  lines: CartLineInput[] = [],
+  customerAccessToken: string | null = null,
+) {
+  const input: Record<string, unknown> = { lines };
+  if (customerAccessToken) input.buyerIdentity = { customerAccessToken };
   return storefrontFetch<{
     cartCreate: { cart: Cart; userErrors: Array<{ field: string; message: string }> };
-  }>(CART_CREATE, { input: { lines } });
+  }>(CART_CREATE, { input });
+}
+
+// ── Buyer identity ────────────────────────────────────────────────────────────
+//
+// Attaching the signed-in customer's access token to the cart makes checkout
+// open as that customer (prefilled contact, saved addresses) instead of
+// whatever the checkout web view last remembered. Passing null detaches it.
+export const CART_BUYER_IDENTITY_UPDATE = `
+  ${CART_FRAGMENT}
+  mutation CartBuyerIdentityUpdate($cartId: ID!, $buyerIdentity: CartBuyerIdentityInput!) {
+    cartBuyerIdentityUpdate(cartId: $cartId, buyerIdentity: $buyerIdentity) {
+      cart { ...CartFields }
+      userErrors { field message }
+    }
+  }
+`;
+
+export async function updateCartBuyerIdentity(cartId: string, customerAccessToken: string | null) {
+  return storefrontFetch<{
+    cartBuyerIdentityUpdate: { cart: Cart; userErrors: Array<{ field: string; message: string }> };
+  }>(CART_BUYER_IDENTITY_UPDATE, { cartId, buyerIdentity: { customerAccessToken } });
 }
 
 // ── Add lines to cart ─────────────────────────────────────────────────────────

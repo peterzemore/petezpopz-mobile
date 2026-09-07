@@ -39,6 +39,9 @@ const KEYS = {
   REFRESH: 'ppz_refresh_token',
   EXPIRY: 'ppz_token_expiry',
   PKCE_VERIFIER: 'ppz_pkce_verifier',
+  // OpenID id_token from the code exchange. Shopify's logout endpoint requires
+  // it as id_token_hint; without it the browser session can't be ended.
+  ID_TOKEN: 'ppz_id_token',
 } as const;
 
 // expo-auth-session's redirect completion is unreliable in standalone Android
@@ -62,12 +65,14 @@ export async function saveTokens(
   accessToken: string,
   refreshToken: string,
   expiresIn: number,
+  idToken?: string | null,
 ): Promise<void> {
   const expiry = Date.now() + expiresIn * 1000;
   await Promise.all([
     SecureStore.setItemAsync(KEYS.ACCESS, accessToken),
     SecureStore.setItemAsync(KEYS.REFRESH, refreshToken),
     SecureStore.setItemAsync(KEYS.EXPIRY, String(expiry)),
+    ...(idToken ? [SecureStore.setItemAsync(KEYS.ID_TOKEN, idToken)] : []),
   ]);
 }
 
@@ -145,6 +150,7 @@ export async function exchangeCodeForTokens(code: string, codeVerifier: string) 
     accessToken: json.access_token,
     refreshToken: json.refresh_token,
     expiresIn: json.expires_in ?? 3600,
+    idToken: (json.id_token as string | undefined) ?? null,
   };
 }
 
@@ -241,19 +247,31 @@ export async function redeemPointsForCode(
   return body as RedemptionResult;
 }
 
-// ── Sign out (revoke session at the Customer Account API) ────────────────────
+// ── Sign out (end the Shopify browser session, not just our tokens) ──────────
+//
+// Sign-in runs in the system browser sheet, which shares cookies with Safari /
+// Chrome. Clearing our stored tokens leaves Shopify's session cookie in place,
+// so the next "Sign in" silently resumed the previous account. Ending that
+// session means the logout URL has to be *opened in that same browser* with the
+// id_token we got at sign-in as id_token_hint — a plain fetch() from the app
+// carries no browser cookies and does nothing (that was the previous behavior).
+//
+// Shopify must have the post-logout redirect registered under the Customer
+// Account API app's "Logout URI"; we reuse the OAuth callback URI for that.
 
 export async function logoutFromShopify(): Promise<void> {
-  if (!LOGOUT_ENDPOINT || !CLIENT_ID) return;
+  if (!LOGOUT_ENDPOINT) return;
+  const idToken = await SecureStore.getItemAsync(KEYS.ID_TOKEN).catch(() => null);
+  if (!idToken) return; // session predates id_token storage; nothing we can end
+  const url =
+    `${LOGOUT_ENDPOINT}?id_token_hint=${encodeURIComponent(idToken)}` +
+    `&post_logout_redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-    await fetch(`${LOGOUT_ENDPOINT}?id_token_hint=${encodeURIComponent(CLIENT_ID)}`, {
-      method: 'GET',
-      signal: controller.signal,
-    }).finally(() => clearTimeout(timeout));
+    // Resolves when Shopify redirects back to the app scheme or the user
+    // dismisses the sheet. Either way the local tokens are cleared by the caller.
+    await WebBrowser.openAuthSessionAsync(url, REDIRECT_URI);
   } catch {
-    // Non-critical (including a timeout) — local tokens are cleared regardless
+    // Non-critical — local tokens are cleared regardless
   }
 }
 

@@ -12,6 +12,7 @@ import {
   saveTokens,
 } from '../api/shopify-customer';
 import { fetchCustomer, CustomerProfile } from '../api/queries/customer';
+import { useCartStore } from './cartStore';
 
 interface AuthState {
   isAuthenticated: boolean;
@@ -27,7 +28,12 @@ interface AuthState {
   membershipTier: string;
 
   // Actions
-  setTokens: (accessToken: string, refreshToken: string, expiresIn: number) => Promise<void>;
+  setTokens: (
+    accessToken: string,
+    refreshToken: string,
+    expiresIn: number,
+    idToken?: string | null,
+  ) => Promise<void>;
   loadSession: () => Promise<void>;
   refreshSession: () => Promise<boolean>;
   fetchProfile: () => Promise<void>;
@@ -59,6 +65,24 @@ export function waitForAuthenticated(timeoutMs = 8000): Promise<boolean> {
   });
 }
 
+/**
+ * Everything on the device that could carry one customer into the next one's
+ * session: the cart (and its buyer identity) and the checkout sheet's preload
+ * cache. The checkout web view's own cookies are outside the kit's API, which
+ * is why the cart is re-created rather than reused.
+ */
+async function forgetCustomerOnDevice(): Promise<void> {
+  await useCartStore.getState().resetForSignOut().catch(() => {});
+  try {
+    // Required lazily: instantiating the kit at module scope in a route file
+    // breaks Expo Router's route discovery (see app/checkout.tsx).
+    const { ShopifyCheckoutSheet } = require('@shopify/checkout-sheet-kit');
+    new ShopifyCheckoutSheet().invalidate();
+  } catch {
+    // Not fatal; the cart reset alone already breaks the association.
+  }
+}
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
@@ -71,9 +95,12 @@ export const useAuthStore = create<AuthState>()(
       lifetimeSpend: 0,
       membershipTier: 'silver',
 
-      setTokens: async (accessToken, refreshToken, expiresIn) => {
-        await saveTokens(accessToken, refreshToken, expiresIn);
+      setTokens: async (accessToken, refreshToken, expiresIn, idToken = null) => {
+        await saveTokens(accessToken, refreshToken, expiresIn, idToken);
         set({ accessToken, refreshToken, isAuthenticated: true });
+        // Checkout should open as this customer, not as whoever the web view
+        // last remembered.
+        useCartStore.getState().setBuyer(accessToken).catch(() => {});
         await get().fetchProfile();
       },
 
@@ -148,6 +175,7 @@ export const useAuthStore = create<AuthState>()(
       logout: async () => {
         await logoutFromShopify();
         await clearTokens();
+        await forgetCustomerOnDevice();
         set({
           isAuthenticated: false,
           accessToken: null,
@@ -164,6 +192,7 @@ export const useAuthStore = create<AuthState>()(
         if (!accessToken) throw new Error('Not signed in');
         await deleteAccountFromShopify(accessToken);
         await clearTokens();
+        await forgetCustomerOnDevice();
         set({
           isAuthenticated: false,
           accessToken: null,

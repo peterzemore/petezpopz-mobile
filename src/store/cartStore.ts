@@ -14,6 +14,7 @@ import {
   removeDiscountCode,
   setBOPISPickup,
   fetchCart,
+  updateCartBuyerIdentity,
 } from '../api/queries/cart';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { resolveUpsell, type UpsellOffer } from '../api/queries/upsell';
@@ -40,6 +41,12 @@ interface CartState {
   pendingUpsell: UpsellOffer | null;
   /** Products already offered this session, so a decline isn't re-asked. */
   offeredProductIds: string[];
+  /** Signed-in customer's access token, attached to the cart as buyer identity. */
+  buyerToken: string | null;
+  /** Attach (token) or detach (null) the signed-in customer to the current cart. */
+  setBuyer: (customerAccessToken: string | null) => Promise<void>;
+  /** Drop the cart entirely so the next checkout starts clean for a new customer. */
+  resetForSignOut: () => Promise<void>;
 
   // Actions
   initCart: () => Promise<void>;
@@ -66,6 +73,35 @@ export const useCartStore = create<CartState>()((set, get) => ({
   error: null,
   pendingUpsell: null,
   offeredProductIds: [],
+  buyerToken: null,
+
+  setBuyer: async (customerAccessToken) => {
+    set({ buyerToken: customerAccessToken });
+    const { cartId } = get();
+    if (!cartId) return;
+    try {
+      const result = await updateCartBuyerIdentity(cartId, customerAccessToken);
+      const errors = result.data.cartBuyerIdentityUpdate.userErrors;
+      if (errors.length) console.warn('cartBuyerIdentityUpdate:', errors);
+      else set({ cart: result.data.cartBuyerIdentityUpdate.cart });
+    } catch (err) {
+      console.warn('cartBuyerIdentityUpdate failed:', err);
+    }
+  },
+
+  resetForSignOut: async () => {
+    await get().clearCart();
+    set({ buyerToken: null });
+    try {
+      const result = await createCart();
+      const cart = result.data.cartCreate.cart;
+      await AsyncStorage.setItem(CART_ID_KEY, cart.id);
+      set({ cart, cartId: cart.id });
+    } catch {
+      // initCart will create one on next launch
+    }
+  },
+
 
   initCart: async () => {
     const storedId = await AsyncStorage.getItem(CART_ID_KEY);
@@ -81,7 +117,7 @@ export const useCartStore = create<CartState>()((set, get) => ({
       }
     }
     // Create a fresh cart
-    const result = await createCart();
+    const result = await createCart([], get().buyerToken);
     const cart = result.data.cartCreate.cart;
     await AsyncStorage.setItem(CART_ID_KEY, cart.id);
     set({ cart, cartId: cart.id });
@@ -92,7 +128,7 @@ export const useCartStore = create<CartState>()((set, get) => ({
     try {
       let { cartId } = get();
       if (!cartId) {
-        const result = await createCart([{ merchandiseId, quantity }]);
+        const result = await createCart([{ merchandiseId, quantity }], get().buyerToken);
         const cart = result.data.cartCreate.cart;
         await AsyncStorage.setItem(CART_ID_KEY, cart.id);
         set({ cart, cartId: cart.id, isLoading: false });

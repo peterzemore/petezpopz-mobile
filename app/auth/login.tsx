@@ -71,8 +71,8 @@ export default function LoginScreen() {
             });
           }
           return exchangeCodeForTokens(code, verifier)
-            .then(({ accessToken, refreshToken, expiresIn }) =>
-              setTokens(accessToken, refreshToken, expiresIn),
+            .then(({ accessToken, refreshToken, expiresIn, idToken }) =>
+              setTokens(accessToken, refreshToken, expiresIn, idToken),
             )
             .then(goToApp);
         })

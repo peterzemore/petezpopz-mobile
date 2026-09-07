@@ -50,7 +50,7 @@ export default function CallbackScreen() {
           });
         }
         return exchangeCodeForTokens(code, verifier)
-          .then(({ accessToken, refreshToken, expiresIn }) => setTokens(accessToken, refreshToken, expiresIn))
+          .then(({ accessToken, refreshToken, expiresIn, idToken }) => setTokens(accessToken, refreshToken, expiresIn, idToken))
           .then(() => router.replace('/(tabs)'));
       })
       .catch((err) => {
