@@ -11,6 +11,7 @@
 //   SHOPIFY_CUSTOMER_GRAPHQL_URL
 
 import { redeemPoints, cancelRedemption, RedeemError } from '../lib/redeem.js';
+import { customerAuthHeaders } from '../lib/customer-account.js';
 
 const WHOAMI_QUERY = `query { customer { id } }`;
 
@@ -34,10 +35,7 @@ export default async function handler(req, res) {
     // Resolve the caller from their own token — never take an id from the body.
     const whoami = await fetch(customerGraphqlUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-      },
+      headers: customerAuthHeaders(accessToken),
       body: JSON.stringify({ query: WHOAMI_QUERY }),
     }).then((r) => r.json());
 

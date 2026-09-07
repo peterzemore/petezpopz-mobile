@@ -16,6 +16,7 @@
 //   SHOPIFY_CUSTOMER_GRAPHQL_URL   → https://account.yourdomain.com/customer/api/2026-07/graphql
 
 import { adminGraphQL } from '../lib/shopify-admin.js';
+import { customerAuthHeaders } from '../lib/customer-account.js';
 
 const WHOAMI_QUERY = `query { customer { id } }`;
 
@@ -53,15 +54,14 @@ export default async function handler(req, res) {
     // any other customer's account.
     const whoamiRes = await fetch(customerGraphqlUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-      },
+      headers: customerAuthHeaders(accessToken),
       body: JSON.stringify({ query: WHOAMI_QUERY }),
     });
     const whoamiJson = await whoamiRes.json();
     const customerId = whoamiJson?.data?.customer?.id;
     if (!whoamiRes.ok || !customerId) {
+      console.error('[delete-account] whoami failed', whoamiRes.status,
+        JSON.stringify(whoamiJson?.errors ?? whoamiJson).slice(0, 300));
       return res.status(401).json({ error: 'Invalid or expired access token' });
     }
 
