@@ -94,6 +94,20 @@ Every category card in the app (Fandom Grid, `src/api/queries/collections.ts`) b
 - Availability is **United States only**. Adding EU countries requires filing the Digital Services Act trader status in ASC first, or Apple removes the app from EU storefronts.
 - Store listing source of truth is `play-store-assets/app-store-listing.md` (description, keywords, privacy-label answers, review notes). ASC's iPhone slot wanted 6.5-inch screenshots (1284x2778) → `play-store-assets/app-store-6.5in/`; the `app-store-6.9in/` set is unused but kept. Both are resized from the raw `IMG_58xx.PNG` iPhone captures.
 - App Review notes state that sign-in is optional and passwordless (Shopify one-time email code), so there is no demo account; Gold/Platinum are physical-goods subscriptions billed via Shopify checkout (guideline 3.1.3(e)), not in-app purchase. Keep the app consistent with that or the next review will flag it.
+- **App Review history:** build 9 was rejected 2026-09-06 under Guideline 2.1 *Information Needed*
+  (the standard new-developer-account request, not a defect). Answered the same night with a
+  2m34s device recording (Drive link) plus written answers; the reply text and recording shot
+  list live in `../app-store-review/` (outside this public repo). Resubmitted 2026-09-06 23:07,
+  status Waiting for Review. Lessons for the next recording: clear Safari data for
+  **petezpopz.com** (the login lives at account.petezpopz.com, not a shopify domain), delete and
+  reinstall the app to clear the checkout sheet's cookies, use a fresh Gmail plus-address per
+  attempt because Shopify throttles one-time codes per email, and install the reviewed build via
+  TestFlight (internal tester = yourself), never the dev server.
+- **In-app account deletion never worked before 2026-09-06**: barcode-proxy sent the Customer
+  Account API `Authorization: Bearer shcat_...`; the API wants the raw token plus
+  `Shopify-Store-Domain`/`Shopify-Client-Id` (see `barcode-proxy/lib/customer-account.js`, which
+  mirrors `customerHeaders()` in the app). Fixed in all four customer-token proxy endpoints and
+  deployed; Vercel env `SHOPIFY_CUSTOMER_CLIENT_ID` added.
 - `ios.buildNumber` auto-increments on every production build (`autoIncrement: true`, `appVersionSource: local`) and EAS edits `app.json` locally — commit that bump after each build so the repo matches what was uploaded.
 
 ## Sign-out and customer identity (fixed in code 2026-09-07, ships in build 10)
