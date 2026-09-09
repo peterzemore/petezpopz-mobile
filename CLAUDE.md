@@ -115,6 +115,16 @@ Every category card in the app (Fandom Grid, `src/api/queries/collections.ts`) b
   Reviewers test iPhone-only apps on iPad regardless. Decision the same day: make it a real
   iPad app (build 10) rather than argue. Notes and a draft reply in
   `../app-store-review/2026-09-09-guideline-2.1a-ipad-keyboard.md`.
+  **Build 10 (2026-09-09, commit f7a9ff5)**: native iPad, uploaded via `eas submit`, processed
+  15:07. TestFlight: the Internal group is Peter's personal Apple ID only; Peter's iPad Pro 12.9 (6th gen,
+  2048x2732, valid 13-inch screenshot size as-is) runs the store's Apple ID, so an **external
+  group "iPad"** was created with that address and build 10 assigned, which put it through Beta
+  App Review (Test Information filled: beta description, feedback/contact pete@petezpopz.com,
+  no demo account). External testers get no invite email until Beta App Review approves. Apple
+  also warned ITMS-90683 (location purpose string) on build 10: react-native-vision-camera compiles
+  in CLLocation unless the plugin gets `enableLocation: false`; fixed in commit 13ba472, ships in
+  build 11. Plan: iPad test on build 10, then build 11 with any layout fixes, iPad screenshots
+  into ASC, attach build 11, send the drafted reply, resubmit.
 - **In-app account deletion never worked before 2026-09-06**: barcode-proxy sent the Customer
   Account API `Authorization: Bearer shcat_...`; the API wants the raw token plus
   `Shopify-Store-Domain`/`Shopify-Client-Id` (see `barcode-proxy/lib/customer-account.js`, which
