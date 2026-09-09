@@ -73,7 +73,12 @@
       ],
       "expo-secure-store",
       "expo-asset",
-      "react-native-vision-camera",
+      [
+        "react-native-vision-camera",
+        {
+          "enableLocation": false
+        }
+      ],
       [
         "@sentry/react-native/expo",
         {
