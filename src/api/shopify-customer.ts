@@ -250,28 +250,30 @@ export async function redeemPointsForCode(
 // ── Sign out (end the Shopify browser session, not just our tokens) ──────────
 //
 // Sign-in runs in the system browser sheet, which shares cookies with Safari /
-// Chrome. Clearing our stored tokens leaves Shopify's session cookie in place,
-// so the next "Sign in" silently resumed the previous account. Ending that
-// session means the logout URL has to be *opened in that same browser* with the
-// id_token we got at sign-in as id_token_hint — a plain fetch() from the app
-// carries no browser cookies and does nothing (that was the previous behavior).
+// Chrome. Clearing our stored tokens leaves Shopify's session in place, so the
+// next "Sign in" silently resumed the previous account. The session is ended by
+// calling the logout endpoint with the id_token we got at sign-in as
+// id_token_hint. The previous code passed the *client id* there, which is why
+// it did nothing.
 //
-// Shopify must have the post-logout redirect registered under the Customer
-// Account API app's "Logout URI"; we reuse the OAuth callback URI for that.
+// This is a public (mobile) client, and for those Shopify says the logout
+// endpoint "can be called as an API endpoint that returns a 200 OK status code
+// on successful logout, rather than performing a redirect", and that the
+// Headless channel's Logout URI setting "is not applicable to mobile public
+// clients" (checked 2026-09-09: the Customer Account API page for this
+// storefront has no Logout URI field). So: a plain request, no browser sheet,
+// no post_logout_redirect_uri.
 
 export async function logoutFromShopify(): Promise<void> {
   if (!LOGOUT_ENDPOINT) return;
   const idToken = await SecureStore.getItemAsync(KEYS.ID_TOKEN).catch(() => null);
   if (!idToken) return; // session predates id_token storage; nothing we can end
-  const url =
-    `${LOGOUT_ENDPOINT}?id_token_hint=${encodeURIComponent(idToken)}` +
-    `&post_logout_redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
   try {
-    // Resolves when Shopify redirects back to the app scheme or the user
-    // dismisses the sheet. Either way the local tokens are cleared by the caller.
-    await WebBrowser.openAuthSessionAsync(url, REDIRECT_URI);
-  } catch {
-    // Non-critical — local tokens are cleared regardless
+    const res = await fetch(`${LOGOUT_ENDPOINT}?id_token_hint=${encodeURIComponent(idToken)}`);
+    if (!res.ok) console.warn('[auth] Shopify logout returned', res.status);
+  } catch (err) {
+    // Non-critical — local tokens are cleared by the caller regardless
+    console.warn('[auth] Shopify logout failed', err);
   }
 }
 

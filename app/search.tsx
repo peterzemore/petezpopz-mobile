@@ -12,6 +12,7 @@ import { useLocalSearchParams, Stack } from 'expo-router';
 import { Colors } from '../src/theme/colors';
 import { FontFamily, FontSize } from '../src/theme/typography';
 import { Spacing } from '../src/theme/spacing';
+import { useGridColumns } from '../src/utils/useGridColumns';
 import { ProductCard } from '../src/components/ui/ProductCard';
 import { SortBar } from '../src/components/ui/SortBar';
 import { searchProducts, PRODUCT_SORT_OPTIONS, ProductSortKey, SortChoice } from '../src/api/queries/products';
@@ -25,6 +26,7 @@ export default function SearchScreen() {
   const [hasNextPage, setHasNextPage] = useState(false);
   const [cursor, setCursor] = useState<string | null>(null);
   const [sort, setSort] = useState<SortChoice<ProductSortKey>>(PRODUCT_SORT_OPTIONS[0]); // Featured/Relevance
+  const columns = useGridColumns();
 
   const loadResults = useCallback(
     async (choice: SortChoice<ProductSortKey>, after?: string) => {
@@ -71,7 +73,8 @@ export default function SearchScreen() {
         <FlatList
           data={products}
           keyExtractor={(p) => p.id}
-          numColumns={2}
+          key={columns}
+          numColumns={columns}
           columnWrapperStyle={styles.row}
           contentContainerStyle={styles.grid}
           renderItem={({ item }) => (

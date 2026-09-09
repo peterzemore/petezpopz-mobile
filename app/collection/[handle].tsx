@@ -12,6 +12,7 @@ import { useLocalSearchParams, Stack } from 'expo-router';
 import { Colors } from '../../src/theme/colors';
 import { FontFamily, FontSize } from '../../src/theme/typography';
 import { Spacing } from '../../src/theme/spacing';
+import { useGridColumns } from '../../src/utils/useGridColumns';
 import { ProductCard } from '../../src/components/ui/ProductCard';
 import { SortBar } from '../../src/components/ui/SortBar';
 import { InlineSearchBar } from '../../src/components/ui/InlineSearchBar';
@@ -38,6 +39,7 @@ export default function CollectionScreen() {
   const [cursor, setCursor] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [sort, setSort] = useState<SortChoice<CollectionSortKey>>(COLLECTION_SORT_OPTIONS[0]);
+  const columns = useGridColumns();
   const [searchQuery, setSearchQuery] = useState('');
 
   const loadProducts = useCallback(
@@ -120,7 +122,8 @@ export default function CollectionScreen() {
         <FlatList
           data={displayed}
           keyExtractor={(p) => p.id}
-          numColumns={2}
+          key={columns}
+          numColumns={columns}
           columnWrapperStyle={styles.row}
           contentContainerStyle={styles.grid}
           renderItem={({ item }) => (

@@ -14,6 +14,7 @@ import { useLocalSearchParams, Stack } from 'expo-router';
 import { Colors } from '../../src/theme/colors';
 import { FontFamily, FontSize } from '../../src/theme/typography';
 import { Spacing } from '../../src/theme/spacing';
+import { useGridColumns } from '../../src/utils/useGridColumns';
 import { ProductCard } from '../../src/components/ui/ProductCard';
 import { SortBar } from '../../src/components/ui/SortBar';
 import { InlineSearchBar } from '../../src/components/ui/InlineSearchBar';
@@ -30,6 +31,7 @@ export default function TagBrowseScreen() {
   const [hasNextPage, setHasNextPage] = useState(false);
   const [cursor, setCursor] = useState<string | null>(null);
   const [sort, setSort] = useState<SortChoice<ProductSortKey>>(PRODUCT_SORT_OPTIONS[1]); // Best Selling
+  const columns = useGridColumns();
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -88,7 +90,8 @@ export default function TagBrowseScreen() {
         <FlatList
           data={products}
           keyExtractor={(p) => p.id}
-          numColumns={2}
+          key={columns}
+          numColumns={columns}
           columnWrapperStyle={styles.row}
           contentContainerStyle={styles.grid}
           renderItem={({ item }) => (

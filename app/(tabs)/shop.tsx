@@ -14,6 +14,7 @@ import { FontFamily, FontSize } from '../../src/theme/typography';
 import { Spacing, BorderRadius } from '../../src/theme/spacing';
 import { CategoryIconCard } from '../../src/components/ui/CategoryIconCard';
 import { FUNKO_CATEGORIES, LOUNGEFLY_CATEGORIES } from '../../src/api/queries/collections';
+import { useGridColumns } from '../../src/utils/useGridColumns';
 
 type BrandTab = 'funko' | 'loungefly';
 
@@ -21,6 +22,7 @@ export default function ShopScreen() {
   const router = useRouter();
   const { brand } = useLocalSearchParams<{ brand?: string }>();
   const [activeTab, setActiveTab] = useState<BrandTab>('funko');
+  const columns = useGridColumns();
 
   // Lets the Home screen's "Shop All Funko/Loungefly" cards deep-link into
   // the right tab here, since this is where products are actually separated by tag.
@@ -82,10 +84,10 @@ export default function ShopScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.grid}
       >
-        {/* Render 2-column grid */}
-        {Array.from({ length: Math.ceil(categories.length / 2) }, (_, rowIdx) => (
+        {/* Render the grid, 2 columns on a phone and more on an iPad */}
+        {Array.from({ length: Math.ceil(categories.length / columns) }, (_, rowIdx) => (
           <View key={rowIdx} style={styles.gridRow}>
-            {categories.slice(rowIdx * 2, rowIdx * 2 + 2).map((cat) => (
+            {categories.slice(rowIdx * columns, rowIdx * columns + columns).map((cat) => (
               <CategoryIconCard
                 key={cat.handle}
                 label={cat.label}
@@ -95,8 +97,11 @@ export default function ShopScreen() {
                 requireTag={cat.tag}
               />
             ))}
-            {/* Pad last row if odd count */}
-            {rowIdx * 2 + 1 >= categories.length && <View style={{ flex: 1 }} />}
+            {/* Pad the last row so its cards keep the same width */}
+            {Array.from(
+              { length: Math.max(0, rowIdx * columns + columns - categories.length) },
+              (_, i) => <View key={`pad-${i}`} style={{ flex: 1 }} />,
+            )}
           </View>
         ))}
 

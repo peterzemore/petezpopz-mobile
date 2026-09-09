@@ -25,8 +25,9 @@
     ],
     "ios": {
       "bundleIdentifier": "com.petezpopz.app",
-      "supportsTablet": false,
-      "buildNumber": "9",
+      "supportsTablet": true,
+      "requireFullScreen": true,
+      "buildNumber": "10",
       "infoPlist": {
         "NSCameraUsageDescription": "PetezPopz needs camera access to scan product barcodes.",
         "ITSAppUsesNonExemptEncryption": false

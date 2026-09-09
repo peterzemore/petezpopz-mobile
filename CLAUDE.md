@@ -90,7 +90,12 @@ Every category card in the app (Fandom Grid, `src/api/queries/collections.ts`) b
 
 - App Store Connect record: **"PeteZ PopZ"**, Apple ID `6809233073`, SKU `petezpopz-ios`, bundle `com.petezpopz.app`, team `Q62G243P6Q` (individual Apple Developer membership, personal Apple ID; a conversion to an organization membership under the LLC is planned but not started). Version 1.0 / build 9 was the first submission.
 - `eas submit --platform ios --latest` is **non-interactive** now: `eas.json` carries `ascAppId` + `appleTeamId`, and an App Store Connect API key ("[Expo] EAS Submit") lives on EAS servers. If it ever asks to log in again, the Apple ID is Peter's personal address, not the store Gmail — the API key may have been revoked in ASC under Users and Access → Integrations.
-- iOS is **iPhone-only** (`ios.supportsTablet: false`) on purpose: the UI is phone-designed and iPad support would require iPad screenshots plus an iPad review pass. Don't flip it back without regenerating iPad screenshots.
+- iOS runs **natively on iPad since build 10** (`ios.supportsTablet: true`, `ios.requireFullScreen: true`
+  so portrait-only stays legal on iPad). Build 9 was iPhone-only and App Review tested it on an
+  iPad anyway, where iPhone-compatibility mode broke the sign-in keyboard (see review history).
+  The layouts adapt with `src/utils/useGridColumns.ts` (2/3/4 product columns by window width),
+  a capped product gallery, and a phone-width login card; everything else stretches. App Store
+  Connect now requires 13-inch iPad screenshots (2064x2752 or 2048x2732) alongside the iPhone set.
 - Availability is **United States only**. Adding EU countries requires filing the Digital Services Act trader status in ASC first, or Apple removes the app from EU storefronts.
 - Store listing source of truth is `play-store-assets/app-store-listing.md` (description, keywords, privacy-label answers, review notes). ASC's iPhone slot wanted 6.5-inch screenshots (1284x2778) → `play-store-assets/app-store-6.5in/`; the `app-store-6.9in/` set is unused but kept. Both are resized from the raw `IMG_58xx.PNG` iPhone captures.
 - App Review notes state that sign-in is optional and passwordless (Shopify one-time email code), so there is no demo account; Gold/Platinum are physical-goods subscriptions billed via Shopify checkout (guideline 3.1.3(e)), not in-app purchase. Keep the app consistent with that or the next review will flag it.
@@ -103,6 +108,13 @@ Every category card in the app (Fandom Grid, `src/api/queries/collections.ts`) b
   reinstall the app to clear the checkout sheet's cookies, use a fresh Gmail plus-address per
   attempt because Shopify throttles one-time codes per email, and install the reviewed build via
   TestFlight (internal tester = yourself), never the dev server.
+  **Second rejection 2026-09-09 09:47, Guideline 2.1(a):** reviewed on an iPad Air 11-inch
+  (M3), iPadOS 26.6.1: "no keyboard shown in order to input verification code". The code is
+  typed on Shopify's hosted login page inside the system auth sheet; in iPhone-compatibility
+  mode on iPadOS 26 that sheet shows no keyboard (Apple forum thread 811744, unresolved).
+  Reviewers test iPhone-only apps on iPad regardless. Decision the same day: make it a real
+  iPad app (build 10) rather than argue. Notes and a draft reply in
+  `../app-store-review/2026-09-09-guideline-2.1a-ipad-keyboard.md`.
 - **In-app account deletion never worked before 2026-09-06**: barcode-proxy sent the Customer
   Account API `Authorization: Bearer shcat_...`; the API wants the raw token plus
   `Shopify-Store-Domain`/`Shopify-Client-Id` (see `barcode-proxy/lib/customer-account.js`, which
@@ -115,14 +127,17 @@ Every category card in the app (Fandom Grid, `src/api/queries/collections.ts`) b
 Two build-9 bugs, both found while recording the App Review video, both platform-neutral:
 
 - **Sign-out did not end Shopify's browser session.** `logoutFromShopify()` used to `fetch()` the
-  logout endpoint with the *client id* as `id_token_hint` and no cookies, so it did nothing; the
-  system browser sheet (Safari / Chrome custom tab) kept the session cookie and the next sign-in
-  silently resumed the previous account. Now the code exchange stores the OpenID `id_token`
-  (`KEYS.ID_TOKEN`) and sign-out opens the logout URL through `WebBrowser.openAuthSessionAsync`
-  with `id_token_hint` + `post_logout_redirect_uri` (the OAuth callback URI). **Shopify config
-  required before build 10:** in the store's Customer Account API app settings, add the OAuth
-  callback URI as a **Logout URI**, or Shopify rejects the redirect. Sessions signed in before
-  this change have no stored id_token and skip the browser logout (tokens still cleared).
+  logout endpoint with the *client id* as `id_token_hint`, so it did nothing; the system browser
+  sheet kept the session cookie and the next sign-in silently resumed the previous account. Now
+  the code exchange stores the OpenID `id_token` (`KEYS.ID_TOKEN`) and sign-out calls the logout
+  endpoint with it as `id_token_hint`, as a plain request. Shopify documents that for a public
+  (mobile) client the endpoint is called as an API returning 200, and that the Headless channel's
+  Logout URI setting does not apply to mobile public clients; the storefront's Customer Account
+  API page indeed has no such field (checked 2026-09-09), so **no Shopify configuration is
+  needed**. An earlier version of this fix opened the logout URL in the auth sheet and waited for
+  a redirect that a mobile client never gets. Sessions signed in before this change have no
+  stored id_token and skip the call (tokens still cleared). Verify on device: sign in, sign out,
+  Sign in again must ask for an email.
 - **Checkout opened as whoever the checkout web view last remembered.** Shopify's checkout sheet
   keeps its own cookie store inside the app; the kit exposes no cookie clearing. Mitigation in two
   halves: while signed in, the customer's access token is attached to the cart as

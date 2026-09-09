@@ -1,6 +1,6 @@
 // PetezPopz — Product Detail Page (PDP)
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Dimensions, ActivityIndicator, Alert, FlatList, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, useWindowDimensions, ActivityIndicator, Alert, FlatList, Linking } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Colors } from '../../src/theme/colors';
@@ -17,11 +17,13 @@ import { useAuthStore } from '../../src/store/authStore';
 import { isMember, applyMemberDiscount, resolveMembership } from '../../src/api/queries/customer';
 import { hasTag, VIP_ONLY_TAG, LAUNCH_TIME_PREFIX } from '../../src/api/taxonomy';
 
-const { width: W } = Dimensions.get('window');
-
 export default function ProductDetailPage() {
   const { handle } = useLocalSearchParams<{ handle: string }>();
   const router = useRouter();
+  // Pages are one window wide; on an iPad the gallery is capped so a Pop
+  // photo doesn't fill the whole screen.
+  const { width: W } = useWindowDimensions();
+  const galleryHeight = Math.min(W * 0.9, 560);
 // Consolidate your store hooks into ONE block
   const addToCart = useCartStore((s) => s.addItem);
   const cartQuantity = useCartStore((s) => s.totalQuantity());
@@ -150,7 +152,7 @@ export default function ProductDetailPage() {
             renderItem={({ item }) => (
               <Image 
                 source={{ uri: item.url }} 
-                style={{ width: W, height: W * 0.9 }} 
+                style={{ width: W, height: galleryHeight }} 
                 contentFit="contain" 
               />
             )}

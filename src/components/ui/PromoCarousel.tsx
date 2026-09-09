@@ -7,7 +7,7 @@ import {
   StyleSheet,
   Pressable,
   FlatList,
-  Dimensions,
+  useWindowDimensions,
   ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
@@ -19,8 +19,6 @@ import { Spacing, BorderRadius } from '../../theme/spacing';
 import { fetchPromoBanners } from '../../api/queries/collections';
 import { Product } from '../../api/shopify-storefront';
 
-const { width: SCREEN_W } = Dimensions.get('window');
-const BANNER_WIDTH = SCREEN_W - Spacing[8];
 const AUTO_SCROLL_MS = 4000;
 
 export function PromoCarousel() {
@@ -31,6 +29,8 @@ export function PromoCarousel() {
   const [loading, setLoading] = useState(true);
   const [activeIndex, setActiveIndex] = useState(0);
   const flatRef = useRef<FlatList>(null);
+  const { width: screenW } = useWindowDimensions();
+  const BANNER_WIDTH = screenW - Spacing[8];
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -92,7 +92,7 @@ export function PromoCarousel() {
         }}
         renderItem={({ item }) => (
           <Pressable
-            style={styles.banner}
+            style={[styles.banner, { width: BANNER_WIDTH }]}
             onPress={() => router.push(`/product/${item.handle}`)}
           >
             <Image
@@ -152,7 +152,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   banner: {
-    width: BANNER_WIDTH,
     height: 220,
     borderRadius: BorderRadius.xl,
     overflow: 'hidden',

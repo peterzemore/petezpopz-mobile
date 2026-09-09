@@ -55,7 +55,7 @@ First release of the PetezPopz app: browse live inventory, earn rewards, scan ba
 ## Screenshots
 - 6.9-inch iPhone (required): `app-store-6.9in/ios-1..5.png`, 1320x2868, upload in numeric order.
 - 6.5-inch: not needed; ASC scales the 6.9-inch set.
-- iPad: required only while `ios.supportsTablet` is true in app.json (see open decision below).
+- iPad 13-inch (required from build 10, `ios.supportsTablet` is true again): 2064x2752 or 2048x2732 portrait, captured on Peter's iPad from the TestFlight build. Not yet produced.
 
 ## App Privacy (nutrition labels)
 Answer "Yes, we collect data from this app". Data types, all linked to the user's identity
