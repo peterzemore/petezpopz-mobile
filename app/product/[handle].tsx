@@ -175,7 +175,7 @@ export default function ProductDetailPage() {
             ))}
           </View>
 
-          <ScarcityBadge quantity={Math.min(...product.variants.nodes.map(v => v.quantityAvailable ?? 999))} />
+          <ScarcityBadge variant="pill" quantity={Math.min(...product.variants.nodes.map(v => v.quantityAvailable ?? 999))} />
         </View>
         
         <View style={styles.infoContainer}>

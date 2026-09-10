@@ -14,9 +14,15 @@ import { BorderRadius, Spacing } from '../../theme/spacing';
 
 interface Props {
   quantity: number;
+  /**
+   * 'band' (default) stretches across the bottom of a product card image.
+   * 'pill' is a small rounded tag for the product page gallery, where the
+   * band overlapped the page dots and ran edge to edge (2026-09-09).
+   */
+  variant?: 'band' | 'pill';
 }
 
-export function ScarcityBadge({ quantity }: Props) {
+export function ScarcityBadge({ quantity, variant = 'band' }: Props) {
   if (quantity <= 0) return null;
   if (quantity >= 10) return null;
 
@@ -41,7 +47,7 @@ export function ScarcityBadge({ quantity }: Props) {
   const isCritical = quantity <= 3;
 
   return (
-    <Animated.View style={[styles.badge, isCritical && styles.critical, animStyle]}>
+    <Animated.View style={[styles.badge, variant === 'pill' && styles.pill, isCritical && styles.critical, animStyle]}>
       <Text style={styles.text}>
         {isCritical ? `🔴 Only ${quantity} Left!` : `⚠️ Low Stock: ${quantity}`}
       </Text>
@@ -58,6 +64,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(234, 67, 53, 0.85)',
     paddingVertical: Spacing[1],
     alignItems: 'center',
+  },
+  pill: {
+    left: Spacing[4],
+    right: undefined,
+    bottom: Spacing[8],
+    paddingHorizontal: Spacing[3],
+    paddingVertical: Spacing[2],
+    borderRadius: BorderRadius.full,
   },
   critical: {
     backgroundColor: 'rgba(234, 67, 53, 0.95)',

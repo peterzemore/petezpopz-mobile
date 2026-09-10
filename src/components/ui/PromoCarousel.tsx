@@ -31,6 +31,11 @@ export function PromoCarousel() {
   const flatRef = useRef<FlatList>(null);
   const { width: screenW } = useWindowDimensions();
   const BANNER_WIDTH = screenW - Spacing[8];
+  // A fixed 220pt banner at iPad width cropped the figure down to a sliver
+  // (2026-09-09). Scale the height with the width and, once the banner is
+  // wider than a phone, show the whole image instead of filling the box.
+  const BANNER_HEIGHT = Math.max(220, Math.min(Math.round(BANNER_WIDTH * 0.5), 480));
+  const BANNER_FIT = BANNER_WIDTH > 600 ? 'contain' : 'cover';
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -92,13 +97,13 @@ export function PromoCarousel() {
         }}
         renderItem={({ item }) => (
           <Pressable
-            style={[styles.banner, { width: BANNER_WIDTH }]}
+            style={[styles.banner, { width: BANNER_WIDTH, height: BANNER_HEIGHT }]}
             onPress={() => router.push(`/product/${item.handle}`)}
           >
             <Image
               source={{ uri: item.images.nodes[0]?.url }}
               style={StyleSheet.absoluteFill}
-              contentFit="cover"
+              contentFit={BANNER_FIT}
               transition={300}
             />
             <LinearGradient
