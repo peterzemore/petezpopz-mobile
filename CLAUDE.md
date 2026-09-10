@@ -133,7 +133,12 @@ Every category card in the app (Fandom Grid, `src/api/queries/collections.ts`) b
   (Users and Access, any minimal role such as Customer Support), put that user in the
   **Internal** group, and the build is testable immediately with no Beta App Review. Keep
   external groups for the day there is a real demo account. Thread id
-  e5c241bb-4e97-304f-825b-46f716fadb35 under Distribution > App Review.
+  e5c241bb-4e97-304f-825b-46f716fadb35 under Distribution > App Review. Done that evening:
+  the store's Apple ID is now an ASC user (Customer Support) in the Internal group and build 10
+  installed on the iPad. Gotcha: the tester sat at "No Builds Available" with TestFlight showing
+  only a Redeem button until the tester was removed from the group and re-added, which flipped it
+  to "Invited" and sent the TestFlight email. TestFlight uses the App Store (Media & Purchases)
+  Apple ID, not the iCloud one.
 - **In-app account deletion never worked before 2026-09-06**: barcode-proxy sent the Customer
   Account API `Authorization: Bearer shcat_...`; the API wants the raw token plus
   `Shopify-Store-Domain`/`Shopify-Client-Id` (see `barcode-proxy/lib/customer-account.js`, which
