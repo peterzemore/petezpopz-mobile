@@ -1,6 +1,7 @@
 // PetezPopz — Product Detail Page (PDP)
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, useWindowDimensions, ActivityIndicator, Alert, FlatList, Linking } from 'react-native';
+import { useHeaderHeight } from '@react-navigation/elements';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Colors } from '../../src/theme/colors';
@@ -23,6 +24,12 @@ export default function ProductDetailPage() {
   // Pages are one window wide; on an iPad the gallery is capped so a Pop
   // photo doesn't fill the whole screen.
   const { width: W } = useWindowDimensions();
+  // The header is transparent (see Stack.Screen options below), so the
+  // ScrollView starts under the status bar and the back/cart buttons and the
+  // top of the first product image was hidden until the page bounced
+  // (seen on iPhone and iPad, 2026-09-09). Pad the gallery down by the
+  // header's height so the whole picture shows.
+  const headerHeight = useHeaderHeight();
   const galleryHeight = Math.min(W * 0.9, 560);
 // Consolidate your store hooks into ONE block
   const addToCart = useCartStore((s) => s.addItem);
@@ -139,7 +146,7 @@ export default function ProductDetailPage() {
         }}
       />
       <ScrollView style={styles.scroll}>
-        <View style={styles.gallery}>
+        <View style={[styles.gallery, { paddingTop: headerHeight }]}>
           <FlatList
             data={product.images.nodes}
             keyExtractor={(img) => img.url}
