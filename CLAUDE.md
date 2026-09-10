@@ -138,7 +138,11 @@ Every category card in the app (Fandom Grid, `src/api/queries/collections.ts`) b
   installed on the iPad. Gotcha: the tester sat at "No Builds Available" with TestFlight showing
   only a Redeem button until the tester was removed from the group and re-added, which flipped it
   to "Invited" and sent the TestFlight email. TestFlight uses the App Store (Media & Purchases)
-  Apple ID, not the iCloud one.
+  Apple ID, not the iCloud one. **iPad test of build 10 (2026-09-09 evening, iPad Pro 12.9):** the
+  sign-in keyboard appears on Shopify's code page and sign-out then sign-in as another address
+  works, so the 2.1(a) defect is gone on the native iPad build. Found and fixed for build 11
+  (commit c35a1e8): iPadOS 26 letterboxes the portrait-only app in landscape (iPad now allows all
+  orientations), and the home VIP Drops shelf now shows New Arrivals.
 - **In-app account deletion never worked before 2026-09-06**: barcode-proxy sent the Customer
   Account API `Authorization: Bearer shcat_...`; the API wants the raw token plus
   `Shopify-Store-Domain`/`Shopify-Client-Id` (see `barcode-proxy/lib/customer-account.js`, which
