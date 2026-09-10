@@ -143,6 +143,11 @@ Every category card in the app (Fandom Grid, `src/api/queries/collections.ts`) b
   works, so the 2.1(a) defect is gone on the native iPad build. Found and fixed for build 11
   (commit c35a1e8): iPadOS 26 letterboxes the portrait-only app in landscape (iPad now allows all
   orientations), and the home VIP Drops shelf now shows New Arrivals.
+  **Build 11 (2026-09-09 22:29, commit 79bd190)**: submitted 22:32 via `eas submit`. Carries the
+  ITMS-90683 fix, iPad landscape, New Arrivals shelf, gallery-below-header fix, width-scaled hero
+  banner (contain on wide screens), and the scarcity pill on the product page. Next: Apple processing,
+  iPad check of build 11, 13-inch screenshots into ASC, attach build 11 to version 1.0, send the reply
+  in `../app-store-review/2026-09-09-guideline-2.1a-ipad-keyboard.md` with the keyboard screenshot.
 - **In-app account deletion never worked before 2026-09-06**: barcode-proxy sent the Customer
   Account API `Authorization: Bearer shcat_...`; the API wants the raw token plus
   `Shopify-Store-Domain`/`Shopify-Client-Id` (see `barcode-proxy/lib/customer-account.js`, which
