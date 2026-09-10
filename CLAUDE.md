@@ -125,6 +125,15 @@ Every category card in the app (Fandom Grid, `src/api/queries/collections.ts`) b
   in CLLocation unless the plugin gets `enableLocation: false`; fixed in commit 13ba472, ships in
   build 11. Plan: iPad test on build 10, then build 11 with any layout fixes, iPad screenshots
   into ASC, attach build 11, send the drafted reply, resubmit.
+  **Beta App Review rejected build 10 the same evening (2026-09-09 20:12, Guideline 2.1(a)
+  Information Needed)**: the beta reviewer could not get past sign-in and wants a user name and
+  password under TestFlight > Test Information > Beta App Review Information. There is no
+  password (Shopify Customer Accounts are passwordless), so an external TestFlight group will
+  hit this every time. Route around it: add the iPad's Apple ID as an App Store Connect user
+  (Users and Access, any minimal role such as Customer Support), put that user in the
+  **Internal** group, and the build is testable immediately with no Beta App Review. Keep
+  external groups for the day there is a real demo account. Thread id
+  e5c241bb-4e97-304f-825b-46f716fadb35 under Distribution > App Review.
 - **In-app account deletion never worked before 2026-09-06**: barcode-proxy sent the Customer
   Account API `Authorization: Bearer shcat_...`; the API wants the raw token plus
   `Shopify-Store-Domain`/`Shopify-Client-Id` (see `barcode-proxy/lib/customer-account.js`, which
