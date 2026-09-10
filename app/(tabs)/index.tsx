@@ -18,14 +18,13 @@ import { Spacing, BorderRadius, Shadow } from '../../src/theme/spacing';
 import { SearchBar } from '../../src/components/ui/SearchBar';
 import { PromoCarousel } from '../../src/components/ui/PromoCarousel';
 import { LoyaltyGauge } from '../../src/components/ui/LoyaltyGauge';
-import { VIPDropsShelf } from '../../src/components/ui/VIPDropsShelf';
-import { isMember } from '../../src/api/queries/customer';
+import { NewArrivalsShelf } from '../../src/components/ui/NewArrivalsShelf';
 import { useAuthStore } from '../../src/store/authStore';
 import { useCartStore } from '../../src/store/cartStore';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { customer, loyaltyPoints, membershipTier, isAuthenticated, fetchProfile } = useAuthStore();
+  const { customer, loyaltyPoints, isAuthenticated, fetchProfile } = useAuthStore();
   const cartQuantity = useCartStore((s) => s.totalQuantity());
   const [refreshing, setRefreshing] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
@@ -163,9 +162,10 @@ export default function HomeScreen() {
           </Pressable>
         )}
 
-        {/* ── VIP Drops ─────────────────────────────────────────── */}
-        {/* Self-hiding: renders nothing when no product carries VIP_Only. */}
-        <VIPDropsShelf memberIsVIP={isMember(membershipTier)} />
+        {/* ── New Arrivals ──────────────────────────────────────── */}
+        {/* Replaced the VIP Drops shelf 2026-09-09 (no paid early access yet).
+            Self-hiding: renders nothing when no product carries "New Arrivals". */}
+        <NewArrivalsShelf />
 
         {/* ── The Split Store Fork ──────────────────────────────── */}
         <View style={styles.sectionBlock}>

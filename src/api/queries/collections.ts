@@ -111,6 +111,26 @@ export async function fetchVIPReleases() {
   return res;
 }
 
+// ── New Arrivals shelf ────────────────────────────────────────────────────────
+// Every new product is tagged "New Arrivals" on creation and the tag expires
+// 31 days after stock arrives (bundle-tools/expire-new-arrivals.mjs), so this
+// tag query is the same "fresh this month" set the website shows.
+
+export const GET_NEW_ARRIVALS = `
+  ${PRODUCT_CARD_FRAGMENT}
+  query GetNewArrivals {
+    products(first: 20, query: "tag:'New Arrivals'", sortKey: CREATED_AT, reverse: true) {
+      nodes { ...ProductCard }
+    }
+  }
+`;
+
+export async function fetchNewArrivals() {
+  const res = await storefrontFetch<{ products: { nodes: Product[] } }>(GET_NEW_ARRIVALS);
+  res.data.products.nodes = filterVisibleProducts(res.data.products.nodes);
+  return res;
+}
+
 // ── Collection by handle (paginated) ──────────────────────────────────────────
 
 export const GET_COLLECTION = `
