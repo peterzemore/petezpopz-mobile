@@ -101,7 +101,7 @@ export default function LoginScreen() {
         {/* Logo */}
         <View style={styles.logoSection}>
           <Text style={styles.logoIcon}>🎯</Text>
-          <Text style={styles.logoTitle}>PetezPopz</Text>
+          <Text style={styles.logoTitle}>PeteZ PopZ</Text>
           <Text style={styles.logoSub}>Collector's Hub</Text>
         </View>
 

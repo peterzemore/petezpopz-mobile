@@ -370,7 +370,7 @@ export default function RewardsScreen() {
             onPress={() => {
               Alert.alert(
                 'Delete Account?',
-                'This permanently deletes your PetezPopz account and order history. This cannot be undone.',
+                'This permanently deletes your PeteZ PopZ account and order history. This cannot be undone.',
                 [
                   { text: 'Cancel', style: 'cancel' },
                   {

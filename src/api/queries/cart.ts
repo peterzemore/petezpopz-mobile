@@ -215,7 +215,7 @@ export async function setBOPISPickup(cartId: string, isPickup: boolean, location
     cartId,
     attributes: [
       { key: 'fulfillment_method', value: isPickup ? 'in_store_pickup' : 'shipping' },
-      { key: 'pickup_location', value: locationName ?? 'PetezPopz Store' },
+      { key: 'pickup_location', value: locationName ?? 'PeteZ PopZ Store' },
     ],
   });
 }

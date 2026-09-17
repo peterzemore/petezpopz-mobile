@@ -75,7 +75,7 @@ export default function HomeScreen() {
         {/* ── Top Bar ──────────────────────────────────────────── */}
         <View style={styles.topBar}>
           <View style={styles.logoArea}>
-            <Text style={styles.logoText}>🎯 PetezPopz</Text>
+            <Text style={styles.logoText}>🎯 PeteZ PopZ</Text>
           </View>
 
           <View style={styles.topBarActions}>

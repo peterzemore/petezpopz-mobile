@@ -73,10 +73,10 @@ export const useWishlistStore = create<WishlistState>()(
 
       toShareText: () => {
         const { items } = get();
-        if (!items.length) return 'My PetezPopz Wish List is empty!';
+        if (!items.length) return 'My PeteZ PopZ Wish List is empty!';
 
         const lines = [
-          '🎁 My PetezPopz Wish List',
+          '🎁 My PeteZ PopZ Wish List',
           '━━━━━━━━━━━━━━━━━━━━━━━━',
           ...items.map(
             (item, i) =>

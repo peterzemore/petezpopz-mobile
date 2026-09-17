@@ -75,7 +75,7 @@ export default function CallbackScreen() {
             style={styles.retryBtn}
             onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))}
           >
-            <Text style={styles.retryText}>Back to PetezPopz</Text>
+            <Text style={styles.retryText}>Back to PeteZ PopZ</Text>
           </Pressable>
         </View>
       </SafeAreaView>

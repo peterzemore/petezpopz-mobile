@@ -96,7 +96,7 @@ export default function ProductDetailPage() {
           onPress: () => {
             const subject = `Notify me when back in stock: ${product.title}`;
             const body =
-              `Hi PetezPopz team,\n\n` +
+              `Hi PeteZ PopZ team,\n\n` +
               `Please notify me when this item is back in stock:\n\n` +
               `${product.title}\n` +
               `https://www.petezpopz.com/products/${product.handle}\n\n` +

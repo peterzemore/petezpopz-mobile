@@ -99,7 +99,7 @@ export default function ToyBoxScreen() {
     try {
       await Share.share({
         message: toShareText(),
-        title: 'My PetezPopz Wish List',
+        title: 'My PeteZ PopZ Wish List',
       });
     } catch (err) {
       console.warn('Share failed:', err);

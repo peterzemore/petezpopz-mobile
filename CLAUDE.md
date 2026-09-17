@@ -85,9 +85,20 @@ Every category card in the app (Fandom Grid, `src/api/queries/collections.ts`) b
 - Store listing marketing assets (feature graphic, resized icons, raw phone screenshots for Play/App Store submissions) live in the sibling `play-store-assets/` folder, not `assets/`. This is just organizational hygiene, not a build-size concern — Metro only bundles files actually `require()`'d/imported somewhere in `app/`/`src/`, so unreferenced files sitting in `assets/` are never embedded in the binary regardless of `assetBundlePatterns`. Still, keep `assets/` to files the app code actually uses so it stays obvious what's live vs. one-off exports.
 - The Play Store "delete account" URL (`EXPO_PUBLIC_DELETE_ACCOUNT_URL` calls the in-app deletion flow) has a public-facing companion page that lives on the Shopify site, **not in this repo**: `petezpopz.com/pages/delete-your-petezpopz-account`. If the deletion flow's behavior changes (what's deleted, what's retained), that page's copy needs a matching update or it'll misrepresent the actual process to both users and Play Store reviewers.
 - `tsconfig.json` declares path aliases (`@/*`, `@theme/*`, `@components/*`, `@api/*`, `@store/*`) but they are **not wired up for Metro** — there's no `babel-plugin-module-resolver` in `babel.config.js` and no `resolver.alias` in `metro.config.js`. Every file in `app/` and `src/` uses relative imports (`../../src/theme/colors`) instead. An `@/`-style import will type-check fine (tsc honors the alias) but fail to bundle at runtime — if you see that split (green in the editor, red in Metro), this is why. Either wire up the alias resolver properly or keep using relative imports; don't assume the aliases work as-is.
+- **App display name changed 2026-09-16** from `PetezPopz` (one word) to `PeteZ PopZ` (two words) — customers were searching for the two-word form and not finding the app. Changed in `app.json`'s `name` (drives the home-screen icon label on both platforms) and `ios.infoPlist.NSCameraUsageDescription`, plus 10 user-facing UI strings: `app/auth/login.tsx` logo, `app/(tabs)/index.tsx` home header logo, `app/callback.tsx` back-link, `app/checkout.tsx` pickup message, `src/api/queries/cart.ts`'s `pickup_location` cart-attribute fallback (shows in Shopify order notes), `src/store/wishlistStore.ts` share text (x2), `app/(tabs)/toybox.tsx` share title, `app/(tabs)/rewards.tsx` delete-account alert, `app/product/[handle].tsx` back-in-stock email template. Source-code header comments (`// PetezPopz — ...`, ~40 files) were deliberately left one-word — not user-facing, out of scope for this pass; don't take their presence as a sign the rename was missed.
 
 ## iOS / App Store (set up 2026-09-06)
 
+- **Chrome session for App Store Connect logs out silently — verify before trusting any automated
+  check.** Found 2026-09-10: a scheduled morning check navigated straight to a TestFlight builds
+  URL and got redirected to `appstoreconnect.apple.com/login?...&authResult=FAILED` with no obvious
+  error in a quick glance — `get_page_text` on that page still returns real-looking text ("Apple.com
+  / Copyright...") which can look like a legitimate (if sparse) result if you don't check the URL
+  the navigation actually landed on. **Any Chrome-driven ASC check must confirm the resulting URL
+  still starts with `appstoreconnect.apple.com` (not `/login`) before reading or reporting the page
+  content** — a login redirect is a hard stop, not a page to scrape, and should be reported to
+  Peter as "you need to sign back in," never silently retried or guessed around. This session has no
+  standing credential to re-authenticate with, and must not attempt to.
 - App Store Connect record: **"PeteZ PopZ"**, Apple ID `6809233073`, SKU `petezpopz-ios`, bundle `com.petezpopz.app`, team `Q62G243P6Q` (individual Apple Developer membership, personal Apple ID; a conversion to an organization membership under the LLC is planned but not started). Version 1.0 / build 9 was the first submission.
 - `eas submit --platform ios --latest` is **non-interactive** now: `eas.json` carries `ascAppId` + `appleTeamId`, and an App Store Connect API key ("[Expo] EAS Submit") lives on EAS servers. If it ever asks to log in again, the Apple ID is Peter's personal address, not the store Gmail — the API key may have been revoked in ASC under Users and Access → Integrations.
 - iOS runs **natively on iPad since build 10** (`ios.supportsTablet: true`, `ios.requireFullScreen: true`
@@ -96,6 +107,12 @@ Every category card in the app (Fandom Grid, `src/api/queries/collections.ts`) b
   The layouts adapt with `src/utils/useGridColumns.ts` (2/3/4 product columns by window width),
   a capped product gallery, and a phone-width login card; everything else stretches. App Store
   Connect now requires 13-inch iPad screenshots (2064x2752 or 2048x2732) alongside the iPhone set.
+  **Do not toggle `requireFullScreen` to `false` to chase the App Store's "Designed for iPad" vs.
+  "Designed for iPhone" label** — tried and reverted 2026-09-16. That flag is load-bearing: it's
+  what lets the app stay portrait-only on iPad without having to implement full Split View/Slide
+  Over multitasking. Turning it off for a cosmetic label change risks Apple's binary validation
+  or App Review flagging the missing multitasking support, or resurfacing a layout bug at
+  arbitrary iPad window sizes the app was never built to handle.
 - Availability is **United States only**. Adding EU countries requires filing the Digital Services Act trader status in ASC first, or Apple removes the app from EU storefronts.
 - Store listing source of truth is `play-store-assets/app-store-listing.md` (description, keywords, privacy-label answers, review notes). ASC's iPhone slot wanted 6.5-inch screenshots (1284x2778) → `play-store-assets/app-store-6.5in/`; the `app-store-6.9in/` set is unused but kept. Both are resized from the raw `IMG_58xx.PNG` iPhone captures.
 - App Review notes state that sign-in is optional and passwordless (Shopify one-time email code), so there is no demo account; Gold/Platinum are physical-goods subscriptions billed via Shopify checkout (guideline 3.1.3(e)), not in-app purchase. Keep the app consistent with that or the next review will flag it.
@@ -145,15 +162,59 @@ Every category card in the app (Fandom Grid, `src/api/queries/collections.ts`) b
   orientations), and the home VIP Drops shelf now shows New Arrivals.
   **Build 11 (2026-09-09 22:29, commit 79bd190)**: submitted 22:32 via `eas submit`. Carries the
   ITMS-90683 fix, iPad landscape, New Arrivals shelf, gallery-below-header fix, width-scaled hero
-  banner (contain on wide screens), and the scarcity pill on the product page. Next: Apple processing,
-  iPad check of build 11, 13-inch screenshots into ASC, attach build 11 to version 1.0, send the reply
-  in `../app-store-review/2026-09-09-guideline-2.1a-ipad-keyboard.md` with the keyboard screenshot.
+  banner (contain on wide screens), and the scarcity pill on the product page.
+  **Resubmitted 2026-09-12**: 5 iPad 13-inch screenshots added to ASC (`play-store-assets/app-store-13in/`,
+  matching the iPhone set — Fandom Grid, product page, cart, rewards, membership), build 11 attached
+  to version 1.0, the reply in `../app-store-review/2026-09-09-guideline-2.1a-ipad-keyboard.md` sent
+  to Apple with the keyboard screenshot attached. Submission `ded539bc-4d3c-4abd-af6d-9d10dc76a1f8`
+  now Waiting for Review.
 - **In-app account deletion never worked before 2026-09-06**: barcode-proxy sent the Customer
   Account API `Authorization: Bearer shcat_...`; the API wants the raw token plus
   `Shopify-Store-Domain`/`Shopify-Client-Id` (see `barcode-proxy/lib/customer-account.js`, which
   mirrors `customerHeaders()` in the app). Fixed in all four customer-token proxy endpoints and
   deployed; Vercel env `SHOPIFY_CUSTOMER_CLIENT_ID` added.
 - `ios.buildNumber` auto-increments on every production build (`autoIncrement: true`, `appVersionSource: local`) and EAS edits `app.json` locally — commit that bump after each build so the repo matches what was uploaded.
+- **Version 1.0.1, builds 12/13 (2026-09-16):** the app-name rename above required a new build.
+  Build 12 (`expo.version` still `1.0.0`) uploaded fine via `eas submit` but was then **rejected
+  by Apple's binary validation** (before App Review even sees it) with ITMS errors 90062/90186:
+  "CFBundleShortVersionString [1.0.0] must contain a higher version than the previously approved
+  version [1.0.0]" / "Invalid Pre-Release Train. The train version '1.0.0' is closed for new build
+  submissions." Once a marketing version is approved and live, that version train is closed for
+  good — bumping `ios.buildNumber` alone is not enough for a new build to be accepted. Fix: bump
+  `expo.version` too (`1.0.0` → `1.0.1`), rebuild (→ build 13), resubmit — uploaded successfully,
+  processed and showed up in TestFlight ~10 minutes later. **Lesson: any future rebuild of an
+  already-approved version needs `expo.version` bumped, not just the build number, or the upload
+  gets rejected at this stage.** Uploading to App Store Connect via `eas submit` is not the same as
+  submitting for App Review — that's still a separate manual step in ASC (create the new version,
+  attach the build, click Submit for Review); auto-release is on, so it ships live once approved.
+
+## Android / Play Store
+
+- Play Console developer account: **"ZemoreIQ"**, package `com.petezpopz.app`. **Claude cannot
+  reach this account through Claude-in-Chrome** — it lives in a Chrome profile separate from the
+  two Google accounts (`petezpopz@gmail.com`, `peter@zemoanalytics.com`) visible to Claude's tab
+  group. This is profile isolation, not a login problem, and doesn't resolve by retrying or trying
+  other `/u/N/` indexes — Peter has to drive Play Console himself; Claude can advise from a
+  screenshot but not navigate it directly.
+- No automated submit is configured for Android — `eas.json`'s `submit.production` only has `ios`
+  credentials, no Google service-account key. `eas submit --platform android` needs one set up
+  first (create a service account in Play Console, grant release permissions, wire the key into
+  `eas.json`) — not done as of 2026-09-16. Until then: get the `.aab` download URL from
+  `eas build:list --platform android --json` (`applicationArchiveUrl`), download it, and upload
+  manually in Play Console under **Release → Production → Create new release**.
+- Production and Internal testing tracks can drift independently: as of 2026-09-16, Production
+  was on versionCode 4 (shipped 2026-08-31) while Internal testing was still stranded on
+  versionCode 3 (from 2026-08-22) — nobody had pushed a release to that track since. Check both
+  tracks, not just Production, when auditing what testers actually have installed.
+- The **Play Store listing title** (Grow → Store presence → Main store listing) and the
+  **on-device label under the app icon** are two separate settings, same split as iOS: the listing
+  title is metadata, editable in Play Console with no rebuild; the on-device label comes from
+  `app.json`'s `name` field, baked into the binary, needs a new build. Found 2026-09-16: the Play
+  Store listing title was "PeteZPopZ" (one word, mixed caps) — separate bug from the on-device
+  label also being one word pre-rename; both needed fixing, only one needed a rebuild.
+- A "DEX code optimization is below our threshold" warning (R8/ProGuard obfuscation not
+  configured) shows on the Production release dashboard with a **Fix by Feb 2027** deadline —
+  informational, does not block releases, not addressed as of 2026-09-16.
 
 ## Sign-out and customer identity (fixed in code 2026-09-07, ships in build 10)
 

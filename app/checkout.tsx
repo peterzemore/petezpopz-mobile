@@ -146,7 +146,7 @@ export default function CheckoutScreen() {
               </Text>
               <Text style={styles.bopisSub}>
                 {isBOPIS
-                  ? 'Pick up at PetezPopz — we\'ll have it ready!'
+                  ? 'Pick up at PeteZ PopZ — we\'ll have it ready!'
                   : 'Delivered to your door'}
               </Text>
             </View>
